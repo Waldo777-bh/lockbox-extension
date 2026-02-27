@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generate Lockbox Icons</title></head>
+<body>
+<p>Right-click each canvas and "Save image as..." to save the icons, or use the download links below.</p>
+<div id="output"></div>
+<script>
+const sizes = [16, 32, 48, 128];
+const container = document.getElementById('output');
+
+sizes.forEach(size => {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const s = size;
+  const p = s * 0.1; // padding
+
+  // Background rounded rect
+  const r = s * 0.18;
+  ctx.beginPath();
+  ctx.moveTo(p + r, p);
+  ctx.lineTo(s - p - r, p);
+  ctx.quadraticCurveTo(s - p, p, s - p, p + r);
+  ctx.lineTo(s - p, s - p - r);
+  ctx.quadraticCurveTo(s - p, s - p, s - p - r, s - p);
+  ctx.lineTo(p + r, s - p);
+  ctx.quadraticCurveTo(p, s - p, p, s - p - r);
+  ctx.lineTo(p, p + r);
+  ctx.quadraticCurveTo(p, p, p + r, p);
+  ctx.closePath();
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fill();
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = Math.max(1, s * 0.04);
+  ctx.stroke();
+
+  // Lock body
+  const lockW = s * 0.36;
+  const lockH = s * 0.28;
+  const lockX = (s - lockW) / 2;
+  const lockY = s * 0.46;
+  const lockR = s * 0.06;
+
+  ctx.beginPath();
+  ctx.moveTo(lockX + lockR, lockY);
+  ctx.lineTo(lockX + lockW - lockR, lockY);
+  ctx.quadraticCurveTo(lockX + lockW, lockY, lockX + lockW, lockY + lockR);
+  ctx.lineTo(lockX + lockW, lockY + lockH - lockR);
+  ctx.quadraticCurveTo(lockX + lockW, lockY + lockH, lockX + lockW - lockR, lockY + lockH);
+  ctx.lineTo(lockX + lockR, lockY + lockH);
+  ctx.quadraticCurveTo(lockX, lockY + lockH, lockX, lockY + lockH - lockR);
+  ctx.lineTo(lockX, lockY + lockR);
+  ctx.quadraticCurveTo(lockX, lockY, lockX + lockR, lockY);
+  ctx.closePath();
+  ctx.fillStyle = '#22c55e';
+  ctx.fill();
+
+  // Lock shackle
+  const shackleW = s * 0.22;
+  const shackleH = s * 0.18;
+  const shackleX = (s - shackleW) / 2;
+  const shackleY = lockY - shackleH;
+  const shackleLineW = Math.max(1.5, s * 0.06);
+
+  ctx.beginPath();
+  ctx.arc(s / 2, lockY, shackleW / 2, Math.PI, 0, false);
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = shackleLineW;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Keyhole
+  const khR = s * 0.04;
+  const khX = s / 2;
+  const khY = lockY + lockH * 0.38;
+  ctx.beginPath();
+  ctx.arc(khX, khY, khR, 0, Math.PI * 2);
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fill();
+
+  // Keyhole line
+  ctx.beginPath();
+  ctx.moveTo(khX, khY + khR * 0.5);
+  ctx.lineTo(khX, khY + khR * 3);
+  ctx.strokeStyle = '#0a0a0f';
+  ctx.lineWidth = Math.max(1, s * 0.03);
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Display
+  const div = document.createElement('div');
+  div.style.margin = '20px';
+  div.style.display = 'inline-block';
+  const label = document.createElement('p');
+  label.textContent = `${size}x${size}`;
+  div.appendChild(canvas);
+  div.appendChild(label);
+
+  const link = document.createElement('a');
+  link.download = `icon-${size}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.textContent = `Download icon-${size}.png`;
+  link.style.display = 'block';
+  div.appendChild(link);
+
+  container.appendChild(div);
+});
+</script>
+</body>
+</html>
