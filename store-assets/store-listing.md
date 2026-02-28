@@ -13,7 +13,7 @@ FEATURES:
 
 Instant Search — Open the popup and start typing to find any key across all your vaults. Arrow keys to navigate, Enter to copy.
 
-Auto-Fill — Detects API key input fields on popular platforms (OpenAI, Stripe, AWS, GitHub, Anthropic, Clerk) and shows a fill button right next to the field.
+Auto-Fill — Detects API key input fields on popular developer platforms and shows a fill button right next to the field.
 
 Context Menu — Right-click any input field to paste a key directly from your vault.
 
