@@ -1,5 +1,5 @@
 import React from "react";
-import { Lock, LogOut } from "lucide-react";
+import { Lock, LogOut, Crown } from "lucide-react";
 import type { User, Vault } from "../../types";
 
 interface HeaderProps {
@@ -9,6 +9,8 @@ interface HeaderProps {
 }
 
 export function Header({ user, vaults, onSignOut }: HeaderProps) {
+  const isPro = user?.tier === "pro";
+
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-lockbox-border">
       <div className="flex items-center gap-2">
@@ -16,9 +18,17 @@ export function Header({ user, vaults, onSignOut }: HeaderProps) {
           <Lock className="w-3.5 h-3.5 text-lockbox-accent" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-lockbox-text leading-tight">
-            Lockbox
-          </h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-sm font-semibold text-lockbox-text leading-tight">
+              Lockbox
+            </h1>
+            {isPro && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-lockbox-accent/15 text-lockbox-accent text-[9px] font-bold leading-none">
+                <Crown className="w-2.5 h-2.5" />
+                PRO
+              </span>
+            )}
+          </div>
           <p className="text-[10px] text-lockbox-text-muted leading-tight">
             {vaults.length} vault{vaults.length !== 1 ? "s" : ""}
           </p>
