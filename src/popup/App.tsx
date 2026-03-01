@@ -44,6 +44,40 @@ export default function App() {
   const [selectedKey, setSelectedKey] = React.useState<ApiKey | null>(null);
   const isSidePanel = useIsSidePanel();
 
+  // Check for pending captured key from content script "Save to Lockbox" button
+  useEffect(() => {
+    if (wallet.loading || wallet.status !== "unlocked" || !wallet.wallet) return;
+
+    (async () => {
+      try {
+        const result = await chrome.storage.session.get("lockbox_pending_capture");
+        const pending = result.lockbox_pending_capture;
+        if (!pending) return;
+
+        // Only use captures from the last 30 seconds (prevent stale data)
+        if (Date.now() - pending.capturedAt > 30_000) {
+          await chrome.storage.session.remove("lockbox_pending_capture");
+          return;
+        }
+
+        // Clear it immediately so it doesn't trigger again
+        await chrome.storage.session.remove("lockbox_pending_capture");
+
+        // Store data for the AddKey page to pick up
+        (window as any).__lockboxPendingCapture = {
+          service: pending.service || "",
+          name: pending.name || "",
+          value: pending.value || "",
+        };
+
+        // Navigate to add-key page
+        wallet.navigate("add-key");
+      } catch {
+        // Session storage may not be available in all contexts
+      }
+    })();
+  }, [wallet.loading, wallet.status]);
+
   // Apply theme class to root element
   useEffect(() => {
     const root = document.documentElement;

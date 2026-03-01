@@ -2,6 +2,15 @@
 
 import { detectApiKeyFields, type DetectedField } from "./detector";
 
+/** Guard: returns true if the extension context is still alive (not reloaded/uninstalled). */
+function isExtensionContextValid(): boolean {
+  try {
+    return !!chrome.runtime?.id;
+  } catch {
+    return false;
+  }
+}
+
 const ICON_CLASS = "lockbox-field-icon";
 const PICKER_CLASS = "lockbox-key-picker";
 const PROCESSED_ATTR = "data-lockbox-processed";
@@ -126,6 +135,10 @@ function showKeyPicker(field: DetectedField, icon: HTMLElement) {
   setTimeout(() => document.addEventListener("click", onClickOutside), 100);
 
   // Request keys from background
+  if (!isExtensionContextValid()) {
+    picker.remove();
+    return;
+  }
   chrome.runtime.sendMessage({ type: "LOCKBOX_GET_ALL_KEYS" }, (response) => {
     // Consume lastError to prevent "Unchecked runtime.lastError" in console
     if (chrome.runtime.lastError) {
@@ -271,10 +284,20 @@ function init() {
   injectIcons();
 
   // Re-scan periodically for dynamically added fields
-  setInterval(injectIcons, 3000);
+  const scanInterval = setInterval(() => {
+    if (!isExtensionContextValid()) {
+      clearInterval(scanInterval);
+      return;
+    }
+    injectIcons();
+  }, 3000);
 
   // Also watch for DOM changes
   const observer = new MutationObserver(() => {
+    if (!isExtensionContextValid()) {
+      observer.disconnect();
+      return;
+    }
     injectIcons();
   });
   observer.observe(document.body, { childList: true, subtree: true });

@@ -81,6 +81,15 @@ function extractMetadata(wallet: DecryptedWallet): SyncPushPayload["metadata"] {
 
 export async function syncPush(wallet?: DecryptedWallet): Promise<void> {
   try {
+    // Check if user has a dashboard account linked before attempting sync
+    const account = await chrome.storage.local.get("lockbox_account");
+    const token = account.lockbox_account?.token;
+    if (!token) {
+      // Not connected to dashboard — silently skip sync
+      setSyncStatus("offline");
+      return;
+    }
+
     setSyncStatus("syncing");
     const encryptedVault = await getEncryptedVault();
     if (!encryptedVault) {

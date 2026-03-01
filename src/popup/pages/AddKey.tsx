@@ -18,16 +18,34 @@ import { getServiceOptions, SERVICES } from "@/services/serviceRegistry";
 export function AddKey() {
   const { navigate, wallet, addKey, error, setError, loading } = useWalletContext();
 
-  const [service, setService] = useState("");
-  const [name, setName] = useState("");
-  const [value, setValue] = useState("");
+  // Check for pending capture data from content script "Save to Lockbox" button
+  const pendingCapture = useMemo(() => {
+    const data = (window as any).__lockboxPendingCapture;
+    if (data) {
+      delete (window as any).__lockboxPendingCapture;
+      return data as { service: string; name: string; value: string };
+    }
+    return null;
+  }, []);
+
+  const [service, setService] = useState(pendingCapture?.service ?? "");
+  const [name, setName] = useState(pendingCapture?.name ?? "");
+  const [value, setValue] = useState(pendingCapture?.value ?? "");
   const [showValue, setShowValue] = useState(false);
   const [vaultId, setVaultId] = useState(wallet?.vaults[0]?.id ?? "");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(pendingCapture ? "Auto-captured from page" : "");
   const [expiresAt, setExpiresAt] = useState("");
   const [saving, setSaving] = useState(false);
   const [serviceDropdownOpen, setServiceDropdownOpen] = useState(false);
-  const [serviceInput, setServiceInput] = useState("");
+  const [serviceInput, setServiceInput] = useState(() => {
+    if (pendingCapture?.service) {
+      // Try to match against known services for display name
+      const opts = getServiceOptions();
+      const match = opts.find((o) => o.value === pendingCapture.service);
+      return match ? match.label : pendingCapture.service.charAt(0).toUpperCase() + pendingCapture.service.slice(1);
+    }
+    return "";
+  });
   const serviceInputRef = useRef<HTMLInputElement>(null);
 
   const serviceOptions = useMemo(() => getServiceOptions(), []);
