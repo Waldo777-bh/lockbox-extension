@@ -1,7 +1,8 @@
 // Sync engine — push/pull encrypted vault to/from dashboard
 
+import type { DecryptedWallet } from "@/types";
 import { getEncryptedVault, setEncryptedVault, getConfig, setConfig } from "@/lib/storage";
-import { pushVault, pullVault, getSyncStatus } from "./api";
+import { pushVault, pullVault, getSyncStatus, type SyncPushPayload } from "./api";
 
 export type SyncStatus = "synced" | "syncing" | "offline" | "error";
 
@@ -24,24 +25,88 @@ function setSyncStatus(status: SyncStatus) {
   listeners.forEach((fn) => fn(status));
 }
 
-export async function syncPush(): Promise<void> {
+/** Compute a SHA-256 hex checksum of the encrypted vault string */
+async function computeChecksum(data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const buffer = await crypto.subtle.digest("SHA-256", encoder.encode(data));
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/** Extract metadata from the decrypted wallet for dashboard display */
+function extractMetadata(wallet: DecryptedWallet): SyncPushPayload["metadata"] {
+  const now = new Date().toISOString();
+
+  // Build per-service aggregation
+  const serviceMap = new Map<string, { keyCount: number; keyNames: string[] }>();
+  let totalKeys = 0;
+
+  const vaults = wallet.vaults.map((v) => {
+    const vaultServices = new Set<string>();
+    for (const key of v.keys) {
+      vaultServices.add(key.service);
+      const existing = serviceMap.get(key.service);
+      if (existing) {
+        existing.keyCount++;
+        existing.keyNames.push(key.name);
+      } else {
+        serviceMap.set(key.service, { keyCount: 1, keyNames: [key.name] });
+      }
+    }
+    totalKeys += v.keys.length;
+
+    return {
+      id: v.id,
+      name: v.name,
+      keyCount: v.keys.length,
+      services: Array.from(vaultServices),
+      lastModified: v.updatedAt || now,
+    };
+  });
+
+  const services = Array.from(serviceMap.entries()).map(([name, data]) => ({
+    name,
+    keyCount: data.keyCount,
+    keyNames: data.keyNames,
+  }));
+
+  return {
+    vaultCount: wallet.vaults.length,
+    totalKeys,
+    vaults,
+    services,
+    lastModified: now,
+  };
+}
+
+export async function syncPush(wallet?: DecryptedWallet): Promise<void> {
   try {
     setSyncStatus("syncing");
-    const vault = await getEncryptedVault();
-    if (!vault) {
+    const encryptedVault = await getEncryptedVault();
+    if (!encryptedVault) {
       setSyncStatus("synced");
       return;
     }
 
-    // We push the encrypted blob as a string — dashboard can't read key values
+    const encryptedString = JSON.stringify(encryptedVault);
+    const checksum = await computeChecksum(encryptedString);
+
+    // Build metadata from decrypted wallet if available
+    const metadata = wallet
+      ? extractMetadata(wallet)
+      : {
+          vaultCount: 0,
+          totalKeys: 0,
+          vaults: [],
+          services: [],
+          lastModified: new Date().toISOString(),
+        };
+
     await pushVault({
-      encryptedVault: JSON.stringify(vault),
-      metadata: {
-        vaultCount: 0, // Would need decrypted data for accurate count
-        keyCount: 0,
-        services: [],
-        lastModified: new Date().toISOString(),
-      },
+      encryptedVault: encryptedString,
+      metadata,
+      checksum,
     });
 
     await setConfig({ lastSynced: new Date().toISOString() });
@@ -72,7 +137,6 @@ export async function syncPull(): Promise<void> {
 
 export async function checkSync(): Promise<boolean> {
   try {
-    const config = await getConfig();
     const status = await getSyncStatus();
     return status.hasChanges;
   } catch {

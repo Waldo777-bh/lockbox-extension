@@ -5,6 +5,7 @@ import { createVault, unlockVault, saveVault, createEmptyWallet, createVaultWith
 import { generateRecoveryPhrase } from "@/crypto/recovery";
 import { DEFAULT_CONFIG, FREE_TIER_LIMITS } from "@/lib/constants";
 import { generateId, countAllKeys } from "@/lib/utils";
+import { syncPush } from "@/sync/syncEngine";
 
 interface WalletState {
   status: WalletStatus;
@@ -145,6 +146,9 @@ export function useWallet() {
 
       // Notify background about activity
       chrome.runtime?.sendMessage({ type: "LOCKBOX_ACTIVITY" }).catch(() => {});
+
+      // Sync wallet to dashboard on unlock
+      syncPush(wallet).catch(() => {});
     } catch (err: any) {
       setState((s) => ({
         ...s,
@@ -168,12 +172,15 @@ export function useWallet() {
     chrome.runtime?.sendMessage({ type: "LOCKBOX_LOCK" }).catch(() => {});
   }, []);
 
-  // Persist wallet changes
+  // Persist wallet changes and trigger background sync
   const persistWallet = useCallback(async (wallet: DecryptedWallet) => {
     if (!derivedKeyRef.current || !saltRef.current) return;
     const encrypted = await saveVault(wallet, derivedKeyRef.current, saltRef.current);
     await setEncryptedVault(encrypted);
     setState((s) => ({ ...s, wallet }));
+
+    // Trigger sync in the background (don't await — fire and forget)
+    syncPush(wallet).catch(() => {});
   }, []);
 
   // Add key
