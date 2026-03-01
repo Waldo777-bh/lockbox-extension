@@ -166,7 +166,7 @@ export function ImportWallet() {
           transition={{ duration: 0.3 }}
         >
           <button
-            onClick={() => navigate("welcome")}
+            onClick={() => navigate("lock-screen")}
             className="p-1.5 rounded-lg hover:bg-lockbox-surface transition-colors cursor-pointer"
           >
             <ArrowLeft size={18} className="text-lockbox-text-secondary" />

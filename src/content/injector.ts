@@ -276,9 +276,18 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 // ── Init ──
-function init() {
+async function init() {
   // Guard against restricted pages where document.body may be null
   if (!document.body) return;
+
+  // Respect user's autoFillEnabled setting
+  try {
+    const result = await chrome.storage.local.get("lockbox_config");
+    const config = result.lockbox_config;
+    if (config && config.autoFillEnabled === false) return;
+  } catch {
+    // If storage access fails, proceed with default (enabled)
+  }
 
   // Initial scan
   injectIcons();

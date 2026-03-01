@@ -111,13 +111,21 @@ export async function syncPush(wallet?: DecryptedWallet): Promise<void> {
           lastModified: new Date().toISOString(),
         };
 
-    await pushVault({
+    const response = await pushVault({
       encryptedVault: encryptedString,
       metadata,
       checksum,
     });
 
-    await setConfig({ lastSynced: new Date().toISOString() });
+    // Apply tier and licence key from dashboard (keeps extension in sync after upgrades)
+    const configUpdate: Record<string, any> = { lastSynced: new Date().toISOString() };
+    if (response?.tier) {
+      configUpdate.tier = response.tier;
+    }
+    if (response?.licenceKey !== undefined) {
+      configUpdate.licenseKey = response.licenceKey;
+    }
+    await setConfig(configUpdate);
     setSyncStatus("synced");
   } catch (err) {
     console.error("Sync push failed:", err);

@@ -260,6 +260,56 @@ export function useWallet() {
     [state.wallet, state.config.tier, persistWallet]
   );
 
+  // Add multiple keys at once (batch import — avoids race condition of sequential addKey calls)
+  const addKeys = useCallback(
+    async (vaultId: string, keys: Omit<ApiKey, "id" | "vaultId" | "createdAt" | "updatedAt" | "lastAccessedAt">[]) => {
+      if (!state.wallet || keys.length === 0) return;
+
+      // Check tier limits
+      const totalKeys = countAllKeys(state.wallet.vaults);
+      if (state.config.tier === "free" && totalKeys + keys.length > FREE_TIER_LIMITS.maxKeys) {
+        setState((s) => ({ ...s, error: `Free tier limit: ${FREE_TIER_LIMITS.maxKeys} keys maximum` }));
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const vaultName = state.wallet.vaults.find((v) => v.id === vaultId)?.name || "";
+
+      const newKeys: ApiKey[] = keys.map((key) => ({
+        ...key,
+        id: generateId(),
+        vaultId,
+        lastAccessedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+      const newAuditEntries: import("@/types").AuditEntry[] = newKeys.map((k) => ({
+        id: generateId(),
+        action: "created" as const,
+        keyId: k.id,
+        keyName: k.name,
+        service: k.service,
+        vaultId,
+        vaultName,
+        timestamp: now,
+      }));
+
+      const updated: DecryptedWallet = {
+        ...state.wallet,
+        vaults: state.wallet.vaults.map((v) =>
+          v.id === vaultId
+            ? { ...v, keys: [...v.keys, ...newKeys], updatedAt: now }
+            : v
+        ),
+        auditLog: [...newAuditEntries, ...state.wallet.auditLog].slice(0, 500),
+      };
+
+      await persistWallet(updated);
+    },
+    [state.wallet, state.config.tier, persistWallet]
+  );
+
   // Update key
   const updateKey = useCallback(
     async (keyId: string, updates: Partial<ApiKey>) => {
@@ -485,7 +535,20 @@ export function useWallet() {
       derivedKeyRef.current = derivedKey;
       saltRef.current = encrypted.salt;
 
+      // Keep recovery vault in sync if wallet has embedded recovery key
+      if (decryptedWallet._recoveryKeyB64) {
+        try {
+          const recoveryVault = await saveRecoveryVault(decryptedWallet, decryptedWallet._recoveryKeyB64);
+          await setRecoveryVault(recoveryVault);
+        } catch {
+          // Non-critical
+        }
+      }
+
       setState((s) => ({ ...s, wallet: decryptedWallet }));
+
+      // Sync re-encrypted vault to dashboard
+      syncPush(decryptedWallet).catch(() => {});
     },
     []
   );
@@ -528,6 +591,7 @@ export function useWallet() {
     unlock,
     lock,
     addKey,
+    addKeys,
     updateKey,
     deleteKey,
     deleteVault,

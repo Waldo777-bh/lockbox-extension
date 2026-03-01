@@ -14,9 +14,9 @@ const STORAGE_KEYS = {
 let lastActivity = Date.now();
 let autoLockMinutes = 15;
 
-// ── Auto-Lock Timer ──
-// Create alarms inside onInstalled so they're only set once, not every wake
+// ── onInstalled: alarms, side panel, context menus (single listener to avoid conflicts) ──
 chrome.runtime.onInstalled.addListener(() => {
+  // Alarms (set once, not on every wake)
   chrome.alarms.create("lockbox-autolock-check", { periodInMinutes: 1 });
   chrome.alarms.create("lockbox-badge-update", { periodInMinutes: 60 });
 
@@ -25,52 +25,16 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
   }
 
-  // Context menu to open in side panel
-  chrome.contextMenus.create({
-    id: "lockbox-sidepanel",
-    title: "Open Lockbox in Side Panel",
-    contexts: ["action"],
-  });
-});
-
-// Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "lockbox-sidepanel" && chrome.sidePanel && tab?.windowId) {
-    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
-  }
-});
-
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === "lockbox-autolock-check") {
-    await checkAutoLock();
-  } else if (alarm.name === "lockbox-badge-update") {
-    await updateBadge();
-  }
-});
-
-async function checkAutoLock() {
-  try {
-    const config = await chrome.storage.local.get(STORAGE_KEYS.CONFIG);
-    const walletConfig = config[STORAGE_KEYS.CONFIG];
-    autoLockMinutes = walletConfig?.autoLockMinutes ?? 15;
-
-    if (autoLockMinutes === 0) return; // Never auto-lock
-
-    const elapsed = (Date.now() - lastActivity) / 60_000;
-    if (elapsed >= autoLockMinutes) {
-      const session = await chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY);
-      if (session[STORAGE_KEYS.DERIVED_KEY]) {
-        await chrome.storage.session.remove(STORAGE_KEYS.DERIVED_KEY);
-        await chrome.storage.local.set({ [STORAGE_KEYS.STATUS]: "locked" });
-        await updateBadge();
-      }
-    }
-  } catch {}
-}
-
-// ── Context Menus ──
-chrome.runtime.onInstalled.addListener(function setupContextMenus() {
+  // Context menus — removeAll first so we never duplicate
   chrome.contextMenus.removeAll(() => {
+    // Side panel context menu on the extension icon
+    chrome.contextMenus.create({
+      id: "lockbox-sidepanel",
+      title: "Open Lockbox in Side Panel",
+      contexts: ["action"],
+    });
+
+    // Right-click → paste key menu on editable fields
     chrome.contextMenus.create({
       id: "lockbox-root",
       title: "Lockbox: Paste API Key",
@@ -102,7 +66,40 @@ chrome.runtime.onInstalled.addListener(function setupContextMenus() {
   updateBadge();
 });
 
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === "lockbox-autolock-check") {
+    await checkAutoLock();
+  } else if (alarm.name === "lockbox-badge-update") {
+    await updateBadge();
+  }
+});
+
+async function checkAutoLock() {
+  try {
+    const config = await chrome.storage.local.get(STORAGE_KEYS.CONFIG);
+    const walletConfig = config[STORAGE_KEYS.CONFIG];
+    autoLockMinutes = walletConfig?.autoLockMinutes ?? 15;
+
+    if (autoLockMinutes === 0) return; // Never auto-lock
+
+    const elapsed = (Date.now() - lastActivity) / 60_000;
+    if (elapsed >= autoLockMinutes) {
+      const session = await chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY);
+      if (session[STORAGE_KEYS.DERIVED_KEY]) {
+        await chrome.storage.session.remove(STORAGE_KEYS.DERIVED_KEY);
+        await chrome.storage.local.set({ [STORAGE_KEYS.STATUS]: "locked" });
+        await updateBadge();
+      }
+    }
+  } catch {}
+}
+
+// ── Context Menu Click Handler (single listener for all menu items) ──
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === "lockbox-sidepanel" && chrome.sidePanel && tab?.windowId) {
+    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+    return;
+  }
   if (info.menuItemId === "lockbox-open" || info.menuItemId === "lockbox-search") {
     try {
       await (chrome.action as any).openPopup();
@@ -322,19 +319,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const defaultVault = wallet.vaults[0];
           if (!defaultVault) return;
 
-          // Add the captured key
+          // Add the captured key (matching the ApiKey schema exactly)
+          const now = new Date().toISOString();
           const newKey = {
             id: crypto.randomUUID(),
+            vaultId: defaultVault.id,
             service: message.payload.service || "unknown",
             name: message.payload.name || "Captured Key",
             value: message.payload.value,
             notes: "Auto-captured from page",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            isFavourite: false,
+            expiresAt: null,
+            favourite: false,
+            lastAccessedAt: null,
+            createdAt: now,
+            updatedAt: now,
           };
           defaultVault.keys.push(newKey);
-          wallet.updatedAt = new Date().toISOString();
+          defaultVault.updatedAt = now;
 
           // Re-encrypt and save
           const keyMaterial = base64ToBuffer(derivedKey);
@@ -443,15 +444,18 @@ chrome.commands.onCommand.addListener(async (command) => {
 // ── Immediate Sync Push ──
 // Lightweight sync push that can run in the service worker without imports.
 // Decrypts the vault, extracts metadata, and pushes to the dashboard API.
-const DASHBOARD_API = "https://dashboard.yourlockbox.dev/api";
+const DEFAULT_DASHBOARD_URL = "https://dashboard.yourlockbox.dev";
 
 async function triggerSyncPush() {
   try {
-    const [accountData, sessionData, vaultData] = await Promise.all([
+    const [accountData, sessionData, vaultData, configData] = await Promise.all([
       chrome.storage.local.get(STORAGE_KEYS.ACCOUNT),
       chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY),
       chrome.storage.local.get(STORAGE_KEYS.VAULT),
+      chrome.storage.local.get(STORAGE_KEYS.CONFIG),
     ]);
+
+    const dashboardUrl = configData[STORAGE_KEYS.CONFIG]?.dashboardUrl || DEFAULT_DASHBOARD_URL;
 
     const token = accountData[STORAGE_KEYS.ACCOUNT]?.token;
     const derivedKey = sessionData[STORAGE_KEYS.DERIVED_KEY];
@@ -517,7 +521,7 @@ async function triggerSyncPush() {
       }
     }
 
-    await fetch(`${DASHBOARD_API}/sync/push`, {
+    const res = await fetch(`${dashboardUrl}/api/sync/push`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -525,6 +529,26 @@ async function triggerSyncPush() {
       },
       body: JSON.stringify({ encryptedVault: encryptedString, metadata, checksum }),
     });
+
+    // Apply tier and licence key from dashboard response
+    if (res.ok) {
+      try {
+        const data = await res.json();
+        if (data.tier) {
+          const currentConfig = configData[STORAGE_KEYS.CONFIG] || {};
+          await chrome.storage.local.set({
+            [STORAGE_KEYS.CONFIG]: {
+              ...currentConfig,
+              tier: data.tier,
+              licenseKey: data.licenceKey ?? currentConfig.licenseKey ?? null,
+              lastSynced: new Date().toISOString(),
+            },
+          });
+        }
+      } catch {
+        // Response parse failed — non-critical
+      }
+    }
   } catch {
     // Sync failed silently — will retry on next trigger
   }

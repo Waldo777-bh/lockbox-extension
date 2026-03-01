@@ -30,6 +30,14 @@ export interface SyncPushPayload {
   checksum: string;
 }
 
+export interface SyncPushResponse {
+  success: boolean;
+  syncedAt: string;
+  version: number;
+  tier: "free" | "pro" | "team";
+  licenceKey: string | null;
+}
+
 interface SyncPullResponse {
   encryptedVault: string;
   lastModified: string;
@@ -69,8 +77,8 @@ async function apiRequest<T>(
   return response.json();
 }
 
-export async function pushVault(payload: SyncPushPayload): Promise<void> {
-  await apiRequest("/sync/push", {
+export async function pushVault(payload: SyncPushPayload): Promise<SyncPushResponse> {
+  return apiRequest<SyncPushResponse>("/sync/push", {
     method: "POST",
     body: JSON.stringify(payload),
   });
