@@ -15,6 +15,7 @@ import { KeyDetail } from "./pages/KeyDetail";
 import { VaultList } from "./pages/VaultList";
 import { Settings } from "./pages/Settings";
 import { Upgrade } from "./pages/Upgrade";
+import { ImportWallet } from "./pages/ImportWallet";
 import type { PopupPage, ApiKey } from "@/types";
 
 type WalletContextType = ReturnType<typeof useWallet> & {
@@ -85,6 +86,8 @@ export default function App() {
         return <Welcome key="welcome" />;
       case "create-wallet":
         return <CreateWallet key="create-wallet" />;
+      case "import-wallet":
+        return <ImportWallet key="import-wallet" />;
       case "recovery-phrase":
         return <RecoveryPhrase key="recovery-phrase" />;
       case "confirm-phrase":

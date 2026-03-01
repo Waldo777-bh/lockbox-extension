@@ -39,7 +39,7 @@ function extractMetadata(wallet: DecryptedWallet): SyncPushPayload["metadata"] {
   const now = new Date().toISOString();
 
   // Build per-service aggregation
-  const serviceMap = new Map<string, { keyCount: number; keyNames: string[] }>();
+  const serviceMap = new Map<string, { keyCount: number }>();
   let totalKeys = 0;
 
   const vaults = wallet.vaults.map((v) => {
@@ -49,9 +49,8 @@ function extractMetadata(wallet: DecryptedWallet): SyncPushPayload["metadata"] {
       const existing = serviceMap.get(key.service);
       if (existing) {
         existing.keyCount++;
-        existing.keyNames.push(key.name);
       } else {
-        serviceMap.set(key.service, { keyCount: 1, keyNames: [key.name] });
+        serviceMap.set(key.service, { keyCount: 1 });
       }
     }
     totalKeys += v.keys.length;
@@ -68,7 +67,7 @@ function extractMetadata(wallet: DecryptedWallet): SyncPushPayload["metadata"] {
   const services = Array.from(serviceMap.entries()).map(([name, data]) => ({
     name,
     keyCount: data.keyCount,
-    keyNames: data.keyNames,
+    keyNames: [] as string[], // Never send key names to server
   }));
 
   return {

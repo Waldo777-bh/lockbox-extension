@@ -141,6 +141,7 @@ export function KeyDetail() {
     selectedKey,
     setSelectedKey,
     wallet,
+    config,
     deleteKey,
     updateKey,
     recordAccess,
@@ -177,6 +178,12 @@ export function KeyDetail() {
   const handleCopyValue = async () => {
     try {
       await navigator.clipboard.writeText(selectedKey.value);
+      const clearSeconds = config.clipboardClearSeconds;
+      if (clearSeconds > 0) {
+        setTimeout(() => {
+          navigator.clipboard.writeText("").catch(() => {});
+        }, clearSeconds * 1000);
+      }
       await recordAccess(selectedKey.id, "copied");
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
