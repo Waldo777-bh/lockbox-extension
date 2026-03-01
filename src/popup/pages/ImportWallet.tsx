@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Eye, EyeOff, Check, X, Loader2, AlertCircle } from "lucide-react";
 import { useWalletContext } from "../App";
 import { getPasswordStrength } from "@/lib/utils";
-import { validateRecoveryPhrase } from "@/crypto/recovery";
+import { validateRecoveryPhrase, recoveryPhraseToKeyB64 } from "@/crypto/recovery";
 import { unlockVaultWithRecovery, createVaultWithRecovery } from "@/crypto/vault";
+import type { DecryptedWallet } from "@/types";
 import {
   getRecoveryVault,
   setEncryptedVault,
@@ -97,14 +98,15 @@ export function ImportWallet() {
 
       if (!recoveryVault) {
         setLocalError(
-          "No recovery vault found. The wallet must have been created on this device, or the recovery data has been cleared."
+          "No recovery vault found. This wallet was created before recovery backup was enabled. " +
+          "You will need to unlock with your password first, then set up recovery from Settings."
         );
         setLoading(false);
         return;
       }
 
       // Step 2: Decrypt the vault using the recovery phrase
-      let decryptedWallet;
+      let decryptedWallet: DecryptedWallet;
       try {
         const result = await unlockVaultWithRecovery(phrase, recoveryVault);
         decryptedWallet = result.wallet;
@@ -116,14 +118,21 @@ export function ImportWallet() {
         return;
       }
 
-      // Step 3: Re-encrypt with the new password (and generate a new recovery vault for the same phrase)
+      // Step 3: Embed recovery key in wallet data so it stays in sync going forward
+      const recoveryKeyB64 = recoveryPhraseToKeyB64(phrase);
+      const walletWithKey: DecryptedWallet = {
+        ...decryptedWallet,
+        _recoveryKeyB64: recoveryKeyB64,
+      };
+
+      // Step 4: Re-encrypt with the new password (and generate a new recovery vault for the same phrase)
       const { encrypted, derivedKey, recoveryEncrypted } = await createVaultWithRecovery(
         password,
         phrase,
-        decryptedWallet
+        walletWithKey
       );
 
-      // Step 4: Store everything
+      // Step 5: Store everything
       await setEncryptedVault(encrypted);
       await setRecoveryVault(recoveryEncrypted);
       await setStatus("unlocked");
@@ -136,8 +145,7 @@ export function ImportWallet() {
         createdAt: new Date().toISOString(),
       });
 
-      // Step 5: Navigate to home (reload the app state)
-      // We need to reload the page to reinitialize the wallet hook with the new data
+      // Step 6: Navigate to home (reload the app state)
       window.location.reload();
     } catch (err: any) {
       setLocalError(err.message || "Failed to import wallet. Please try again.");

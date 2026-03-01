@@ -17,6 +17,12 @@ export function recoveryPhraseToKey(phrase: string): ArrayBuffer {
   return seed.slice(0, 32).buffer as ArrayBuffer;
 }
 
+/** Same as recoveryPhraseToKey but returns a base64-encoded string for storage */
+export function recoveryPhraseToKeyB64(phrase: string): string {
+  const buf = recoveryPhraseToKey(phrase);
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+}
+
 export function getRandomWordsForVerification(
   phrase: string,
   count: number = 3
