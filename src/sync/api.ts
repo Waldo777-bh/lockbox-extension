@@ -83,3 +83,9 @@ export async function pullVault(): Promise<SyncPullResponse> {
 export async function getSyncStatus(): Promise<SyncStatusResponse> {
   return apiRequest<SyncStatusResponse>("/sync/status");
 }
+
+/** Tell the dashboard to clear all synced data (vault, metadata, audit log).
+ *  Called before the user deletes their local wallet. */
+export async function resetSync(): Promise<void> {
+  await apiRequest("/sync/reset", { method: "POST" });
+}
