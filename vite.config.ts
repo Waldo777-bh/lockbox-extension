@@ -9,20 +9,32 @@ import {
   rmSync,
 } from "fs";
 
-// Plugin to flatten popup.html to dist root and fix asset paths
-function flattenPopupHtml(): Plugin {
+function flattenHtmlEntries(): Plugin {
   return {
-    name: "flatten-popup-html",
+    name: "flatten-html-entries",
     closeBundle() {
-      const nested = resolve(__dirname, "dist/src/popup/popup.html");
-      const target = resolve(__dirname, "dist/popup.html");
-      if (existsSync(nested)) {
-        // Read and fix relative paths (../../ -> ./ since we're flattening to root)
-        let html = readFileSync(nested, "utf-8");
+      // Flatten popup.html
+      const popupNested = resolve(__dirname, "dist/src/popup/popup.html");
+      const popupTarget = resolve(__dirname, "dist/popup.html");
+      if (existsSync(popupNested)) {
+        let html = readFileSync(popupNested, "utf-8");
         html = html.replace(/(?:\.\.\/)+/g, "./");
-        writeFileSync(target, html);
-        // Clean up nested src directory
-        rmSync(resolve(__dirname, "dist/src"), { recursive: true, force: true });
+        writeFileSync(popupTarget, html);
+      }
+
+      // Flatten sidepanel.html
+      const sidepanelNested = resolve(__dirname, "dist/src/sidepanel/sidepanel.html");
+      const sidepanelTarget = resolve(__dirname, "dist/sidepanel.html");
+      if (existsSync(sidepanelNested)) {
+        let html = readFileSync(sidepanelNested, "utf-8");
+        html = html.replace(/(?:\.\.\/)+/g, "./");
+        writeFileSync(sidepanelTarget, html);
+      }
+
+      // Clean up nested src directory
+      const srcDir = resolve(__dirname, "dist/src");
+      if (existsSync(srcDir)) {
+        rmSync(srcDir, { recursive: true, force: true });
       }
     },
   };
@@ -30,21 +42,16 @@ function flattenPopupHtml(): Plugin {
 
 export default defineConfig({
   base: "./",
-  plugins: [react(), flattenPopupHtml()],
+  plugins: [react(), flattenHtmlEntries()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
       input: {
         popup: resolve(__dirname, "src/popup/popup.html"),
-        "service-worker": resolve(
-          __dirname,
-          "src/background/service-worker.ts",
-        ),
-        "content-script": resolve(
-          __dirname,
-          "src/content/content-script.ts",
-        ),
+        sidepanel: resolve(__dirname, "src/sidepanel/sidepanel.html"),
+        "service-worker": resolve(__dirname, "src/background/service-worker.ts"),
+        "content-script": resolve(__dirname, "src/content/content-script.ts"),
       },
       output: {
         entryFileNames: "[name].js",
@@ -53,7 +60,6 @@ export default defineConfig({
           if (assetInfo.names?.[0]?.endsWith(".css")) return "[name].[ext]";
           return "assets/[name].[ext]";
         },
-        // Inline dynamic imports for service worker (MV3 requires single file)
         inlineDynamicImports: false,
       },
     },
@@ -67,4 +73,7 @@ export default defineConfig({
     },
   },
   publicDir: "public",
+  optimizeDeps: {
+    exclude: ["argon2-browser"],
+  },
 });

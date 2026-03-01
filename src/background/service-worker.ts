@@ -1,361 +1,412 @@
-import { API_BASE_URL, DASHBOARD_URL, STORAGE_KEYS } from "../lib/constants";
-import type { ApiKey, Vault, VaultWithKeys } from "../types";
+// Lockbox v2 Background Service Worker
+// Manages: auto-lock timer, context menus, omnibox, badges, messaging
 
-// ---- Context Menu Setup ----
+const STORAGE_KEYS = {
+  VAULT: "lockbox_vault",
+  CONFIG: "lockbox_config",
+  STATUS: "lockbox_status",
+  ACCOUNT: "lockbox_account",
+  DERIVED_KEY: "lockbox_derived_key",
+  RECENT_KEYS: "lockbox_recent_keys",
+};
 
+// ── State ──
+let lastActivity = Date.now();
+let autoLockMinutes = 15;
+
+// ── Auto-Lock Timer ──
+// Create alarms inside onInstalled so they're only set once, not every wake
 chrome.runtime.onInstalled.addListener(() => {
-  // Create root context menu
+  chrome.alarms.create("lockbox-autolock-check", { periodInMinutes: 1 });
+  chrome.alarms.create("lockbox-badge-update", { periodInMinutes: 60 });
+
+  // Enable side panel to open on action click (user can pin it)
+  if (chrome.sidePanel) {
+    chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+  }
+
+  // Context menu to open in side panel
   chrome.contextMenus.create({
-    id: "lockbox-root",
-    title: "Lockbox: Paste API Key",
-    contexts: ["editable"],
+    id: "lockbox-sidepanel",
+    title: "Open Lockbox in Side Panel",
+    contexts: ["action"],
+  });
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "lockbox-sidepanel" && chrome.sidePanel && tab?.windowId) {
+    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+  }
+});
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === "lockbox-autolock-check") {
+    await checkAutoLock();
+  } else if (alarm.name === "lockbox-badge-update") {
+    await updateBadge();
+  }
+});
+
+async function checkAutoLock() {
+  try {
+    const config = await chrome.storage.local.get(STORAGE_KEYS.CONFIG);
+    const walletConfig = config[STORAGE_KEYS.CONFIG];
+    autoLockMinutes = walletConfig?.autoLockMinutes ?? 15;
+
+    if (autoLockMinutes === 0) return; // Never auto-lock
+
+    const elapsed = (Date.now() - lastActivity) / 60_000;
+    if (elapsed >= autoLockMinutes) {
+      const session = await chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY);
+      if (session[STORAGE_KEYS.DERIVED_KEY]) {
+        await chrome.storage.session.remove(STORAGE_KEYS.DERIVED_KEY);
+        await chrome.storage.local.set({ [STORAGE_KEYS.STATUS]: "locked" });
+        await updateBadge();
+      }
+    }
+  } catch {}
+}
+
+// ── Context Menus ──
+chrome.runtime.onInstalled.addListener(function setupContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: "lockbox-root",
+      title: "Lockbox: Paste API Key",
+      contexts: ["editable"],
+    });
+
+    chrome.contextMenus.create({
+      id: "lockbox-search",
+      parentId: "lockbox-root",
+      title: "Search all keys...",
+      contexts: ["editable"],
+    });
+
+    chrome.contextMenus.create({
+      id: "lockbox-separator",
+      parentId: "lockbox-root",
+      type: "separator",
+      contexts: ["editable"],
+    });
+
+    chrome.contextMenus.create({
+      id: "lockbox-open",
+      parentId: "lockbox-root",
+      title: "Open Lockbox",
+      contexts: ["editable"],
+    });
   });
 
-  // Set up alarm for periodic checks
-  chrome.alarms.create("lockbox-check-expiring", { periodInMinutes: 60 });
-  chrome.alarms.create("lockbox-cache-refresh", { periodInMinutes: 5 });
+  updateBadge();
 });
-
-// ---- Context Menu Click Handler ----
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!tab?.id) return;
-
-  if (info.menuItemId === "lockbox-root") {
-    // Show submenu would require dynamic menus, so we send a message
-    // to the content script to show a picker
-    chrome.tabs.sendMessage(tab.id, {
-      type: "LOCKBOX_SHOW_PICKER",
-    });
-    return;
-  }
-
-  // Handle key paste from submenu
-  const menuId = String(info.menuItemId);
-  if (menuId.startsWith("lockbox-key-")) {
-    const [vaultId, keyId] = menuId.replace("lockbox-key-", "").split(":");
+  if (info.menuItemId === "lockbox-open" || info.menuItemId === "lockbox-search") {
     try {
-      const token = await getToken();
-      if (!token) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/vaults/${vaultId}/keys/${keyId}/reveal`,
-        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        // Send the value to the content script to paste
-        chrome.tabs.sendMessage(tab.id!, {
-          type: "LOCKBOX_PASTE_KEY",
-          value: data.value,
-        });
-      }
-    } catch (err) {
-      console.error("Failed to paste key:", err);
-    }
+      await (chrome.action as any).openPopup();
+    } catch {}
+    return;
   }
 });
 
-// ---- Update Context Menu with Keys ----
-
-async function updateContextMenu() {
-  try {
-    const token = await getToken();
-    if (!token) return;
-
-    // Fetch vaults and keys
-    const vaultsRes = await fetch(`${API_BASE_URL}/vaults`, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    });
-
-    if (!vaultsRes.ok) return;
-    const vaults: Vault[] = await vaultsRes.json();
-
-    // Remove old submenu items
-    const existingMenuIds = await getMenuIds();
-    for (const id of existingMenuIds) {
-      try {
-        chrome.contextMenus.remove(id);
-      } catch { /* ignore */ }
-    }
-
-    const newMenuIds: string[] = [];
-
-    for (const vault of vaults.slice(0, 5)) {
-      // Vault separator
-      const vaultMenuId = `lockbox-vault-${vault.id}`;
-      chrome.contextMenus.create({
-        id: vaultMenuId,
-        parentId: "lockbox-root",
-        title: vault.name,
-        enabled: false,
-        contexts: ["editable"],
-      });
-      newMenuIds.push(vaultMenuId);
-
-      // Fetch keys for this vault
-      try {
-        const keysRes = await fetch(`${API_BASE_URL}/vaults/${vault.id}/keys`, {
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        });
-
-        if (keysRes.ok) {
-          const keys: ApiKey[] = await keysRes.json();
-          for (const key of keys.slice(0, 10)) {
-            const keyMenuId = `lockbox-key-${vault.id}:${key.id}`;
-            chrome.contextMenus.create({
-              id: keyMenuId,
-              parentId: "lockbox-root",
-              title: `${key.service} — ${key.name}`,
-              contexts: ["editable"],
-            });
-            newMenuIds.push(keyMenuId);
-          }
-        }
-      } catch { /* ignore individual vault failures */ }
-    }
-
-    await chrome.storage.local.set({ lockbox_menu_ids: newMenuIds });
-  } catch (err) {
-    console.error("Failed to update context menu:", err);
-  }
-}
-
-async function getMenuIds(): Promise<string[]> {
-  const result = await chrome.storage.local.get("lockbox_menu_ids");
-  return result.lockbox_menu_ids ?? [];
-}
-
-// ---- Omnibox Integration ----
-
+// ── Omnibox ──
 chrome.omnibox.onInputStarted.addListener(() => {
   chrome.omnibox.setDefaultSuggestion({
-    description: "Search Lockbox keys...",
+    description: "Search Lockbox keys... Type a service or key name",
   });
 });
 
 chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
-  try {
-    const token = await getToken();
-    if (!token) {
-      suggest([]);
-      return;
-    }
-
-    const cache = await getCachedVaults();
-    if (!cache) {
-      suggest([]);
-      return;
-    }
-
-    const lower = text.toLowerCase().trim();
-    const suggestions: chrome.omnibox.SuggestResult[] = [];
-
-    for (const vault of cache) {
-      for (const key of vault.keys) {
-        if (
-          key.name.toLowerCase().includes(lower) ||
-          key.service.toLowerCase().includes(lower) ||
-          vault.name.toLowerCase().includes(lower)
-        ) {
-          suggestions.push({
-            content: `${vault.id}:${key.id}`,
-            description: `${key.service} — ${key.name} (${vault.name})`,
-          });
-        }
-      }
-    }
-
-    suggest(suggestions.slice(0, 8));
-  } catch {
-    suggest([]);
-  }
+  if (!text.trim()) return;
+  suggest([
+    {
+      content: `search:${text}`,
+      description: `Search for "<match>${text}</match>" in Lockbox`,
+    },
+  ]);
 });
 
 chrome.omnibox.onInputEntered.addListener(async (text) => {
-  // text is the content from the suggestion, formatted as vaultId:keyId
-  const parts = text.split(":");
-  if (parts.length === 2) {
-    const [vaultId, keyId] = parts;
-    try {
-      const token = await getToken();
-      if (!token) return;
-
-      const response = await fetch(
-        `${API_BASE_URL}/vaults/${vaultId}/keys/${keyId}/reveal`,
-        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        // Copy to clipboard via offscreen document or notification
-        // Since service workers can't directly access clipboard, we'll use a workaround
-        await chrome.storage.local.set({ lockbox_clipboard_pending: data.value });
-
-        // Open a temporary tab or use the active tab to copy
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.id) {
-          chrome.tabs.sendMessage(tab.id, {
-            type: "LOCKBOX_COPY_TO_CLIPBOARD",
-            value: data.value,
-          });
-        }
-
-        // Show notification
-        chrome.notifications.create({
-          type: "basic",
-          iconUrl: "icons/icon-128.png",
-          title: "Lockbox",
-          message: "API key copied to clipboard!",
-        });
-      }
-    } catch (err) {
-      console.error("Failed to copy key from omnibox:", err);
-    }
+  try {
+    await (chrome.action as any).openPopup();
+  } catch {
+    // Fallback: open extension page
+    const url = chrome.runtime.getURL("popup.html");
+    chrome.tabs.create({ url });
   }
 });
 
-// ---- Badge & Notifications ----
-
-async function checkExpiringKeys() {
+// ── Badge ──
+async function updateBadge() {
   try {
-    const token = await getToken();
-    if (!token) {
-      chrome.action.setBadgeText({ text: "" });
+    const session = await chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY);
+    const isUnlocked = !!session[STORAGE_KEYS.DERIVED_KEY];
+
+    if (!isUnlocked) {
+      await chrome.action.setBadgeText({ text: "" });
+      await chrome.action.setTitle({ title: "Lockbox — Locked" });
       return;
     }
 
-    const cache = await getCachedVaults();
-    if (!cache) return;
+    await chrome.action.setBadgeBackgroundColor({ color: "#00d87a" });
+    await chrome.action.setBadgeText({ text: "" });
+    await chrome.action.setTitle({ title: "Lockbox — Unlocked" });
+  } catch {}
+}
 
-    const now = Date.now();
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    let expiringCount = 0;
+// ── AES/HMAC helpers for service worker (inline, no imports) ──
+function base64ToBuffer(b64: string): ArrayBuffer {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
 
-    for (const vault of cache) {
-      for (const key of vault.keys) {
-        if (key.expiresAt) {
-          const expiresAt = new Date(key.expiresAt).getTime();
-          if (expiresAt - now < sevenDays && expiresAt > now) {
-            expiringCount++;
+function bufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+async function decryptVault(vault: any, derivedKeyB64: string): Promise<any> {
+  const keyMaterial = base64ToBuffer(derivedKeyB64);
+
+  // Verify HMAC
+  const hmacKey = await crypto.subtle.importKey(
+    "raw", keyMaterial, { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+  );
+  const signatureBuf = base64ToBuffer(vault.hmac);
+  const dataBuf = new TextEncoder().encode(vault.ciphertext);
+  const valid = await crypto.subtle.verify("HMAC", hmacKey, signatureBuf, dataBuf);
+  if (!valid) throw new Error("Invalid key");
+
+  // Decrypt
+  const ivBuf = new Uint8Array(base64ToBuffer(vault.iv));
+  const ciphertextBuf = new Uint8Array(base64ToBuffer(vault.ciphertext));
+  const tagBuf = new Uint8Array(base64ToBuffer(vault.tag));
+  const combined = new Uint8Array(ciphertextBuf.length + tagBuf.length);
+  combined.set(ciphertextBuf);
+  combined.set(tagBuf, ciphertextBuf.length);
+
+  const aesKey = await crypto.subtle.importKey(
+    "raw", keyMaterial, { name: "AES-GCM" }, false, ["decrypt"]
+  );
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: ivBuf, tagLength: 128 }, aesKey, combined
+  );
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+// ── Message Handling ──
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message?.type) return;
+
+  switch (message.type) {
+    case "LOCKBOX_ACTIVITY":
+      lastActivity = Date.now();
+      break;
+
+    case "LOCKBOX_LOCK":
+      (async () => {
+        await chrome.storage.session.remove(STORAGE_KEYS.DERIVED_KEY);
+        await chrome.storage.local.set({ [STORAGE_KEYS.STATUS]: "locked" });
+        await updateBadge();
+      })();
+      break;
+
+    case "LOCKBOX_GET_STATUS":
+      (async () => {
+        try {
+          const [status, session] = await Promise.all([
+            chrome.storage.local.get(STORAGE_KEYS.STATUS),
+            chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY),
+          ]);
+          sendResponse({
+            status: status[STORAGE_KEYS.STATUS] || "uninitialized",
+            isUnlocked: !!session[STORAGE_KEYS.DERIVED_KEY],
+          });
+        } catch {
+          sendResponse({ status: "uninitialized", isUnlocked: false });
+        }
+      })();
+      return true;
+
+    case "LOCKBOX_GET_ALL_KEYS":
+      (async () => {
+        try {
+          const session = await chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY);
+          const derivedKey = session[STORAGE_KEYS.DERIVED_KEY];
+          if (!derivedKey) {
+            sendResponse({ keys: [], locked: true });
+            return;
           }
+
+          const stored = await chrome.storage.local.get(STORAGE_KEYS.VAULT);
+          const vault = stored[STORAGE_KEYS.VAULT];
+          if (!vault) {
+            sendResponse({ keys: [], locked: false });
+            return;
+          }
+
+          const wallet = await decryptVault(vault, derivedKey);
+          const allKeys = wallet.vaults.flatMap((v: any) =>
+            v.keys.map((k: any) => ({
+              id: k.id,
+              service: k.service,
+              name: k.name,
+              value: k.value,
+              vaultName: v.name,
+            }))
+          );
+
+          sendResponse({ keys: allKeys, locked: false });
+          lastActivity = Date.now();
+        } catch {
+          sendResponse({ keys: [], locked: true });
         }
+      })();
+      return true;
+
+    case "LOCKBOX_COPY_TO_CLIPBOARD":
+      if (message.payload?.value) {
+        (async () => {
+          try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab?.id) {
+              chrome.tabs.sendMessage(
+                tab.id,
+                { type: "LOCKBOX_COPY_TO_CLIPBOARD", payload: { value: message.payload.value } },
+                () => { if (chrome.runtime.lastError) { /* tab has no content script */ } }
+              );
+            }
+          } catch {}
+        })();
       }
-    }
+      break;
 
-    if (expiringCount > 0) {
-      chrome.action.setBadgeText({ text: String(expiringCount) });
-      chrome.action.setBadgeBackgroundColor({ color: "#f59e0b" });
-    } else {
-      chrome.action.setBadgeText({ text: "" });
-    }
-  } catch {
-    // Silently fail badge updates
-  }
-}
-
-// ---- Alarms ----
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "lockbox-check-expiring") {
-    checkExpiringKeys();
-  }
-  if (alarm.name === "lockbox-cache-refresh") {
-    updateContextMenu();
-  }
-});
-
-// ---- Message Handling ----
-
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === "LOCKBOX_AUTH_TOKEN") {
-    // Forward auth token to popup
-    chrome.runtime.sendMessage(message);
-    sendResponse({ success: true });
-  }
-
-  if (message.type === "LOCKBOX_GET_KEYS") {
-    getCachedVaults().then((vaults) => {
-      sendResponse({ vaults });
-    });
-    return true; // async response
-  }
-
-  if (message.type === "LOCKBOX_REVEAL_KEY") {
-    const { vaultId, keyId } = message;
-    getToken().then(async (token) => {
-      if (!token) {
-        sendResponse({ error: "Not authenticated" });
-        return;
+    case "LOCKBOX_PASTE_KEY":
+      if (message.payload?.value) {
+        (async () => {
+          try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab?.id) {
+              chrome.tabs.sendMessage(
+                tab.id,
+                { type: "LOCKBOX_PASTE_KEY", payload: { value: message.payload.value } },
+                () => { if (chrome.runtime.lastError) { /* tab has no content script */ } }
+              );
+            }
+          } catch {}
+        })();
       }
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/vaults/${vaultId}/keys/${keyId}/reveal`,
-          { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } },
-        );
-        if (response.ok) {
-          const data = await response.json();
-          sendResponse({ value: data.value });
-        } else {
-          sendResponse({ error: "Failed to reveal key" });
+      break;
+
+    case "LOCKBOX_KEY_CAPTURED":
+      (async () => {
+        try {
+          const session = await chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY);
+          const derivedKey = session[STORAGE_KEYS.DERIVED_KEY];
+          if (!derivedKey || !message.payload) {
+            sendResponse?.({ success: false, reason: "locked" });
+            return;
+          }
+
+          const stored = await chrome.storage.local.get(STORAGE_KEYS.VAULT);
+          const vault = stored[STORAGE_KEYS.VAULT];
+          if (!vault) return;
+
+          const wallet = await decryptVault(vault, derivedKey);
+          const defaultVault = wallet.vaults[0];
+          if (!defaultVault) return;
+
+          // Add the captured key
+          const newKey = {
+            id: crypto.randomUUID(),
+            service: message.payload.service || "unknown",
+            name: message.payload.name || "Captured Key",
+            value: message.payload.value,
+            notes: "Auto-captured from page",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isFavourite: false,
+          };
+          defaultVault.keys.push(newKey);
+          wallet.updatedAt = new Date().toISOString();
+
+          // Re-encrypt and save
+          const keyMaterial = base64ToBuffer(derivedKey);
+          const iv = crypto.getRandomValues(new Uint8Array(12));
+          const aesKey = await crypto.subtle.importKey(
+            "raw", keyMaterial, { name: "AES-GCM" }, false, ["encrypt"]
+          );
+          const encoded = new TextEncoder().encode(JSON.stringify(wallet));
+          const encrypted = await crypto.subtle.encrypt(
+            { name: "AES-GCM", iv, tagLength: 128 }, aesKey, encoded
+          );
+          const encBytes = new Uint8Array(encrypted);
+          const ct = encBytes.slice(0, encBytes.length - 16);
+          const tag = encBytes.slice(encBytes.length - 16);
+
+          const hmacKey = await crypto.subtle.importKey(
+            "raw", keyMaterial, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+          );
+          const ctB64 = bufferToBase64(ct.buffer as ArrayBuffer);
+          const sig = await crypto.subtle.sign("HMAC", hmacKey, new TextEncoder().encode(ctB64));
+
+          await chrome.storage.local.set({
+            [STORAGE_KEYS.VAULT]: {
+              ...vault,
+              ciphertext: ctB64,
+              iv: bufferToBase64(iv.buffer as ArrayBuffer),
+              tag: bufferToBase64(tag.buffer as ArrayBuffer),
+              hmac: bufferToBase64(sig),
+              updatedAt: new Date().toISOString(),
+            },
+          });
+
+          lastActivity = Date.now();
+        } catch (e) {
+          console.error("Lockbox: failed to save captured key", e);
         }
-      } catch (err) {
-        sendResponse({ error: "Network error" });
+      })();
+      return true;
+
+    case "LOCKBOX_AUTH_TOKEN":
+      if (message.payload?.user) {
+        chrome.storage.local.set({
+          [STORAGE_KEYS.ACCOUNT]: message.payload.user,
+        });
       }
-    });
-    return true;
+      break;
   }
 });
 
-// ---- Listen for auth from dashboard page ----
-
-chrome.runtime.onMessageExternal?.addListener((message, sender, sendResponse) => {
-  if (
-    sender.url?.startsWith(DASHBOARD_URL) &&
-    message.type === "LOCKBOX_AUTH_TOKEN"
-  ) {
-    chrome.storage.local.set({
-      [STORAGE_KEYS.AUTH_TOKEN]: message.token,
-      [STORAGE_KEYS.USER_DATA]: message.user,
-    });
-    sendResponse({ success: true });
-    updateContextMenu();
-    checkExpiringKeys();
+// ── External Message Handling (from dashboard) ──
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+  if (sender.url?.startsWith("https://dashboard.yourlockbox.dev")) {
+    if (message.type === "LOCKBOX_AUTH_TOKEN") {
+      chrome.storage.local.set({
+        [STORAGE_KEYS.ACCOUNT]: message.payload?.user,
+      });
+      sendResponse({ success: true });
+    }
   }
 });
 
-// ---- Helpers ----
-
-async function getToken(): Promise<string | null> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.AUTH_TOKEN);
-  const token = result[STORAGE_KEYS.AUTH_TOKEN];
-  if (token) return token;
-
-  // Try cookies as fallback
-  try {
-    const cookie = await chrome.cookies.get({
-      url: DASHBOARD_URL,
-      name: "__session",
-    });
-    return cookie?.value ?? null;
-  } catch {
-    return null;
+// ── Keyboard Command Handling ──
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === "quick-copy") {
+    try {
+      await (chrome.action as any).openPopup();
+    } catch {}
   }
-}
+});
 
-async function getCachedVaults(): Promise<VaultWithKeys[] | null> {
-  const result = await chrome.storage.local.get(STORAGE_KEYS.CACHE_DATA);
-  const cache = result[STORAGE_KEYS.CACHE_DATA];
-  if (!cache) return null;
-
-  return cache.vaults.map((vault: Vault) => ({
-    ...vault,
-    keys: cache.keys[vault.id] ?? [],
-  }));
-}
-
-// ---- Startup ----
-
-updateContextMenu();
-checkExpiringKeys();
+// ── Startup ──
+chrome.runtime.onStartup.addListener(() => {
+  lastActivity = Date.now();
+  updateBadge();
+});

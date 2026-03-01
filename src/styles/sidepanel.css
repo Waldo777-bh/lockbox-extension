@@ -1,0 +1,15 @@
+/* Override popup dimensions for side panel — fills the full panel area.
+   Scoped to data-mode="sidepanel" so it does NOT affect the popup. */
+#root[data-mode="sidepanel"],
+#root[data-mode="sidepanel"] ~ *,
+html:has(#root[data-mode="sidepanel"]),
+html:has(#root[data-mode="sidepanel"]) body {
+  width: 100% !important;
+  height: 100vh !important;
+}
+
+#root[data-mode="sidepanel"] > div {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+}

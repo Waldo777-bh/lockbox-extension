@@ -1,190 +1,205 @@
+// Lockbox icon injection and key picker for detected API key fields
+
 import { detectApiKeyFields, type DetectedField } from "./detector";
 
-const LOCKBOX_ICON_CLASS = "lockbox-field-icon";
-const LOCKBOX_PICKER_CLASS = "lockbox-key-picker";
+const ICON_CLASS = "lockbox-field-icon";
+const PICKER_CLASS = "lockbox-key-picker";
+const PROCESSED_ATTR = "data-lockbox-processed";
 
-interface KeyOption {
-  vaultId: string;
-  vaultName: string;
-  keyId: string;
-  keyName: string;
-  service: string;
+// Known platforms for filtering keys
+const PLATFORM_MAP: Record<string, string> = {
+  "platform.openai.com": "openai",
+  "console.anthropic.com": "anthropic",
+  "dashboard.stripe.com": "stripe",
+  "console.aws.amazon.com": "aws",
+  "github.com": "github",
+  "vercel.com": "vercel",
+  "supabase.com": "supabase",
+  "console.firebase.google.com": "firebase",
+  "dashboard.clerk.com": "clerk",
+  "railway.app": "railway",
+  "console.cloud.google.com": "google_cloud",
+  "dash.cloudflare.com": "cloudflare",
+  "console.twilio.com": "twilio",
+  "app.sendgrid.com": "sendgrid",
+  "app.netlify.com": "netlify",
+  "cloud.digitalocean.com": "digitalocean",
+  "dashboard.heroku.com": "heroku",
+  "resend.com": "resend",
+  "console.neon.tech": "neon",
+  "app.planetscale.com": "planetscale",
+};
+
+function getCurrentPlatform(): string | null {
+  const hostname = window.location.hostname;
+  for (const [domain, service] of Object.entries(PLATFORM_MAP)) {
+    if (hostname === domain || hostname.endsWith("." + domain)) {
+      return service;
+    }
+  }
+  return null;
 }
 
-// Track injected icons to avoid duplicates
-const injectedFields = new WeakSet();
-
-function createLockboxIcon(field: DetectedField): HTMLButtonElement {
+function createLockboxIcon(): HTMLButtonElement {
   const btn = document.createElement("button");
-  btn.className = LOCKBOX_ICON_CLASS;
-  btn.title = "Fill with Lockbox key";
-  btn.type = "button";
-
-  // Lock SVG icon
-  btn.innerHTML = `
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="7" width="10" height="7" rx="1.5" fill="#22c55e"/>
-      <path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-      <circle cx="8" cy="10.5" r="1" fill="#0a0a0f"/>
-    </svg>
-  `;
-
-  btn.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    showKeyPicker(field.element, btn);
-  });
-
+  btn.className = ICON_CLASS;
+  btn.title = "Fill from Lockbox";
+  btn.setAttribute("type", "button");
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00d87a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
   return btn;
 }
 
-function positionIcon(
-  icon: HTMLButtonElement,
-  field: HTMLInputElement | HTMLTextAreaElement,
-) {
+function positionIcon(icon: HTMLElement, field: HTMLElement) {
   const rect = field.getBoundingClientRect();
   icon.style.position = "absolute";
-  icon.style.top = `${window.scrollY + rect.top + (rect.height - 24) / 2}px`;
-  icon.style.left = `${window.scrollX + rect.right - 28}px`;
-  icon.style.zIndex = "999999";
+  icon.style.zIndex = "2147483647";
+  icon.style.top = `${rect.top + window.scrollY + (rect.height - 24) / 2}px`;
+  icon.style.left = `${rect.right + window.scrollX - 30}px`;
 }
 
-async function showKeyPicker(
-  field: HTMLInputElement | HTMLTextAreaElement,
-  iconBtn: HTMLButtonElement,
-) {
-  // Remove existing picker
-  document.querySelectorAll(`.${LOCKBOX_PICKER_CLASS}`).forEach((el) => el.remove());
+function fillField(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  // Use native setter to trigger React/Angular/Vue change detection
+  const nativeSetter = Object.getOwnPropertyDescriptor(
+    field.tagName === "TEXTAREA"
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype,
+    "value"
+  )?.set;
+
+  if (nativeSetter) {
+    nativeSetter.call(field, value);
+  } else {
+    field.value = value;
+  }
+
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+  field.dispatchEvent(new Event("change", { bubbles: true }));
+  field.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }));
+  field.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+}
+
+function showKeyPicker(field: DetectedField, icon: HTMLElement) {
+  // Remove any existing picker
+  document.querySelectorAll(`.${PICKER_CLASS}`).forEach((el) => el.remove());
 
   const picker = document.createElement("div");
-  picker.className = LOCKBOX_PICKER_CLASS;
+  picker.className = PICKER_CLASS;
 
-  // Position below the icon
-  const iconRect = iconBtn.getBoundingClientRect();
+  const rect = icon.getBoundingClientRect();
   picker.style.position = "fixed";
-  picker.style.top = `${iconRect.bottom + 4}px`;
-  picker.style.left = `${Math.max(8, iconRect.left - 200)}px`;
-  picker.style.zIndex = "9999999";
+  picker.style.zIndex = "2147483647";
+  picker.style.top = `${rect.bottom + 4}px`;
+  picker.style.left = `${Math.max(10, rect.right - 280)}px`;
 
   picker.innerHTML = `
     <div class="lockbox-picker-header">
-      <span class="lockbox-picker-title">Select a key</span>
+      <span>Select a key</span>
+      <button class="lockbox-picker-close">&times;</button>
     </div>
     <div class="lockbox-picker-loading">
       <div class="lockbox-spinner"></div>
       <span>Loading keys...</span>
     </div>
+    <div class="lockbox-picker-list" style="display:none"></div>
+    <div class="lockbox-picker-empty" style="display:none">
+      <span>No keys found</span>
+    </div>
+    <div class="lockbox-picker-locked" style="display:none">
+      <span>Wallet is locked. Click the Lockbox icon to unlock.</span>
+    </div>
   `;
 
   document.body.appendChild(picker);
 
-  // Close on outside click
-  const closeHandler = (e: MouseEvent) => {
-    if (!picker.contains(e.target as Node) && e.target !== iconBtn) {
+  // Close button
+  picker.querySelector(".lockbox-picker-close")?.addEventListener("click", () => {
+    picker.remove();
+  });
+
+  // Close on click outside
+  const onClickOutside = (e: MouseEvent) => {
+    if (!picker.contains(e.target as Node) && e.target !== icon) {
       picker.remove();
-      document.removeEventListener("click", closeHandler);
+      document.removeEventListener("click", onClickOutside);
     }
   };
-  setTimeout(() => document.addEventListener("click", closeHandler), 10);
+  setTimeout(() => document.addEventListener("click", onClickOutside), 100);
 
-  // Fetch keys from background
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "LOCKBOX_GET_KEYS" });
-    const vaults = response?.vaults;
+  // Request keys from background
+  chrome.runtime.sendMessage({ type: "LOCKBOX_GET_ALL_KEYS" }, (response) => {
+    // Consume lastError to prevent "Unchecked runtime.lastError" in console
+    if (chrome.runtime.lastError) {
+      console.debug("Lockbox: could not reach background", chrome.runtime.lastError.message);
+    }
 
-    if (!vaults || vaults.length === 0) {
-      picker.innerHTML = `
-        <div class="lockbox-picker-header">
-          <span class="lockbox-picker-title">Lockbox</span>
-        </div>
-        <div class="lockbox-picker-empty">No keys available. Open Lockbox to add keys.</div>
-      `;
+    const loading = picker.querySelector(".lockbox-picker-loading") as HTMLElement;
+    const list = picker.querySelector(".lockbox-picker-list") as HTMLElement;
+    const empty = picker.querySelector(".lockbox-picker-empty") as HTMLElement;
+    const locked = picker.querySelector(".lockbox-picker-locked") as HTMLElement;
+
+    if (!response || response.locked) {
+      loading.style.display = "none";
+      locked.style.display = "flex";
       return;
     }
 
-    const options: KeyOption[] = [];
-    for (const vault of vaults) {
-      for (const key of vault.keys) {
-        options.push({
-          vaultId: vault.id,
-          vaultName: vault.name,
-          keyId: key.id,
-          keyName: key.name,
-          service: key.service,
-        });
-      }
+    let keys = response.keys || [];
+    const platform = getCurrentPlatform();
+
+    // Filter by platform if on a known site
+    if (platform) {
+      const platformKeys = keys.filter((k: any) => k.service === platform);
+      if (platformKeys.length > 0) keys = platformKeys;
     }
 
-    let html = `
-      <div class="lockbox-picker-header">
-        <span class="lockbox-picker-title">Select a key</span>
-      </div>
-      <div class="lockbox-picker-list">
-    `;
+    if (keys.length === 0) {
+      loading.style.display = "none";
+      empty.style.display = "flex";
+      return;
+    }
 
-    for (const opt of options.slice(0, 15)) {
-      html += `
-        <button class="lockbox-picker-item" data-vault-id="${opt.vaultId}" data-key-id="${opt.keyId}">
-          <span class="lockbox-picker-service">${escapeHtml(opt.service)}</span>
-          <span class="lockbox-picker-name">${escapeHtml(opt.keyName)}</span>
-          <span class="lockbox-picker-vault">${escapeHtml(opt.vaultName)}</span>
-        </button>
+    loading.style.display = "none";
+    list.style.display = "block";
+
+    // Render keys (max 15)
+    keys.slice(0, 15).forEach((key: any) => {
+      const row = document.createElement("button");
+      row.className = "lockbox-picker-row";
+      row.type = "button";
+
+      const initial = (key.service || "?")[0].toUpperCase();
+      row.innerHTML = `
+        <div class="lockbox-picker-icon">${initial}</div>
+        <div class="lockbox-picker-info">
+          <div class="lockbox-picker-name">${escapeHtml(key.name)}</div>
+          <div class="lockbox-picker-service">${escapeHtml(key.service)} · ${escapeHtml(key.vaultName || "")}</div>
+        </div>
       `;
-    }
 
-    html += "</div>";
-    picker.innerHTML = html;
-
-    // Handle key selection
-    picker.querySelectorAll(".lockbox-picker-item").forEach((item) => {
-      item.addEventListener("click", async () => {
-        const vaultId = item.getAttribute("data-vault-id")!;
-        const keyId = item.getAttribute("data-key-id")!;
-
-        try {
-          const result = await chrome.runtime.sendMessage({
-            type: "LOCKBOX_REVEAL_KEY",
-            vaultId,
-            keyId,
-          });
-
-          if (result?.value) {
-            // Set the field value
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-              window.HTMLInputElement.prototype,
-              "value",
-            )?.set;
-
-            if (nativeInputValueSetter) {
-              nativeInputValueSetter.call(field, result.value);
-            } else {
-              field.value = result.value;
-            }
-
-            // Trigger input events for React/Vue/Angular
-            field.dispatchEvent(new Event("input", { bubbles: true }));
-            field.dispatchEvent(new Event("change", { bubbles: true }));
-            field.dispatchEvent(
-              new KeyboardEvent("keydown", { bubbles: true }),
-            );
-            field.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
-          }
-        } catch (err) {
-          console.error("Lockbox: Failed to fill key", err);
-        }
-
+      row.addEventListener("click", () => {
+        fillField(field.element, key.value);
         picker.remove();
-        document.removeEventListener("click", closeHandler);
+        showFillConfirmation(field.element);
       });
+
+      list.appendChild(row);
     });
-  } catch (err) {
-    picker.innerHTML = `
-      <div class="lockbox-picker-header">
-        <span class="lockbox-picker-title">Lockbox</span>
-      </div>
-      <div class="lockbox-picker-empty">Sign in to Lockbox to use auto-fill.</div>
-    `;
-  }
+  });
+}
+
+function showFillConfirmation(field: HTMLElement) {
+  const toast = document.createElement("div");
+  toast.className = "lockbox-fill-toast";
+  toast.textContent = "Filled from Lockbox";
+
+  const rect = field.getBoundingClientRect();
+  toast.style.position = "fixed";
+  toast.style.zIndex = "2147483647";
+  toast.style.top = `${rect.top - 30}px`;
+  toast.style.left = `${rect.left}px`;
+
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2000);
 }
 
 function escapeHtml(str: string): string {
@@ -193,23 +208,30 @@ function escapeHtml(str: string): string {
   return div.innerHTML;
 }
 
+// ── Main injection logic ──
 function injectIcons() {
   const fields = detectApiKeyFields();
 
   for (const field of fields) {
-    if (injectedFields.has(field.element)) continue;
-    injectedFields.add(field.element);
+    if (field.element.hasAttribute(PROCESSED_ATTR)) continue;
+    field.element.setAttribute(PROCESSED_ATTR, "true");
 
-    const icon = createLockboxIcon(field);
+    const icon = createLockboxIcon();
     document.body.appendChild(icon);
     positionIcon(icon, field.element);
+
+    icon.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showKeyPicker(field, icon);
+    });
 
     // Reposition on scroll/resize
     const reposition = () => positionIcon(icon, field.element);
     window.addEventListener("scroll", reposition, { passive: true });
     window.addEventListener("resize", reposition, { passive: true });
 
-    // Watch for element removal
+    // Clean up if field is removed
     const observer = new MutationObserver(() => {
       if (!document.contains(field.element)) {
         icon.remove();
@@ -222,66 +244,44 @@ function injectIcons() {
   }
 }
 
-// ---- Message Handlers ----
-
+// ── Message handlers from background ──
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === "LOCKBOX_PASTE_KEY" && message.value) {
-    const activeEl = document.activeElement as HTMLInputElement | null;
-    if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      )?.set;
-
-      if (nativeInputValueSetter) {
-        nativeInputValueSetter.call(activeEl, message.value);
-      } else {
-        activeEl.value = message.value;
-      }
-      activeEl.dispatchEvent(new Event("input", { bubbles: true }));
-      activeEl.dispatchEvent(new Event("change", { bubbles: true }));
+  if (message.type === "LOCKBOX_PASTE_KEY" && message.payload?.value) {
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement
+    ) {
+      fillField(active, message.payload.value);
+      showFillConfirmation(active);
     }
   }
 
-  if (message.type === "LOCKBOX_COPY_TO_CLIPBOARD" && message.value) {
-    navigator.clipboard.writeText(message.value).catch(console.error);
-  }
-
-  if (message.type === "LOCKBOX_SHOW_PICKER") {
-    const activeEl = document.activeElement as HTMLInputElement | null;
-    if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
-      // Create a temporary button near the active element
-      const tempBtn = document.createElement("button");
-      tempBtn.style.position = "fixed";
-      const rect = activeEl.getBoundingClientRect();
-      tempBtn.style.top = `${rect.bottom}px`;
-      tempBtn.style.left = `${rect.left}px`;
-      tempBtn.style.display = "none";
-      document.body.appendChild(tempBtn);
-      showKeyPicker(activeEl, tempBtn).finally(() => tempBtn.remove());
-    }
+  if (message.type === "LOCKBOX_COPY_TO_CLIPBOARD" && message.payload?.value) {
+    navigator.clipboard.writeText(message.payload.value).catch(() => {});
   }
 });
 
-// ---- Init ----
+// ── Init ──
+function init() {
+  // Guard against restricted pages where document.body may be null
+  if (!document.body) return;
 
-// Run initial detection
-injectIcons();
-
-// Re-scan periodically for dynamically loaded fields
-const scanInterval = setInterval(injectIcons, 3000);
-
-// Also observe DOM changes
-const domObserver = new MutationObserver(() => {
+  // Initial scan
   injectIcons();
-});
-domObserver.observe(document.body, {
-  childList: true,
-  subtree: true,
-});
 
-// Clean up on unload
-window.addEventListener("unload", () => {
-  clearInterval(scanInterval);
-  domObserver.disconnect();
-});
+  // Re-scan periodically for dynamically added fields
+  setInterval(injectIcons, 3000);
+
+  // Also watch for DOM changes
+  const observer = new MutationObserver(() => {
+    injectIcons();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
