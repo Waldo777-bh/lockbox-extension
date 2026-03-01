@@ -1,25 +1,41 @@
 {
   "manifest_version": 3,
-  "name": "Lockbox - API Key Vault",
-  "description": "Encrypted API key vault. Access, copy, and auto-fill your API keys from anywhere.",
-  "version": "1.0.0",
+  "name": "Lockbox — API Key Wallet",
+  "description": "The MetaMask for API keys. Store, encrypt, and auto-fill your API keys securely.",
+  "version": "2.0.0",
   "permissions": [
     "activeTab",
     "storage",
     "contextMenus",
     "clipboardWrite",
+    "clipboardRead",
     "notifications",
     "alarms",
-    "cookies"
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://dashboard.yourlockbox.dev/*",
-    "https://platform.openai.com/*",
-    "https://dashboard.stripe.com/*",
-    "https://console.aws.amazon.com/*",
+    "https://*.openai.com/*",
+    "https://*.anthropic.com/*",
+    "https://*.stripe.com/*",
+    "https://*.amazonaws.com/*",
     "https://github.com/*",
-    "https://console.anthropic.com/*",
-    "https://dashboard.clerk.com/*"
+    "https://*.vercel.com/*",
+    "https://*.supabase.com/*",
+    "https://*.firebase.google.com/*",
+    "https://*.clerk.com/*",
+    "https://*.railway.app/*",
+    "https://*.cloudflare.com/*",
+    "https://*.twilio.com/*",
+    "https://*.sendgrid.com/*",
+    "https://*.netlify.com/*",
+    "https://*.digitalocean.com/*",
+    "https://*.heroku.com/*",
+    "https://*.neon.tech/*",
+    "https://*.planetscale.com/*",
+    "https://*.resend.com/*",
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -36,16 +52,10 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://platform.openai.com/*",
-        "https://dashboard.stripe.com/*",
-        "https://console.aws.amazon.com/*",
-        "https://github.com/settings/tokens*",
-        "https://console.anthropic.com/*",
-        "https://dashboard.clerk.com/*"
-      ],
+      "matches": ["<all_urls>"],
       "js": ["content-script.js"],
-      "css": ["content-style.css"]
+      "css": ["content-style.css"],
+      "run_at": "document_idle"
     }
   ],
   "omnibox": {
@@ -53,10 +63,12 @@
   },
   "commands": {
     "_execute_action": {
-      "suggested_key": {
-        "default": "Alt+Shift+L"
-      },
-      "description": "Open Lockbox"
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "Open Lockbox Wallet"
+    },
+    "quick-copy": {
+      "suggested_key": { "default": "Alt+Shift+K" },
+      "description": "Quick search and copy a key"
     }
   },
   "icons": {
@@ -64,5 +76,8 @@
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   }
 }
