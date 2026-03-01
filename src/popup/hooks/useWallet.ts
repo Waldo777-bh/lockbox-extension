@@ -69,6 +69,11 @@ export function useWallet() {
           page,
           loading: false,
         }));
+
+        // Trigger background sync whenever the popup opens with an unlocked wallet
+        if (walletData) {
+          syncPush(walletData).catch(() => {});
+        }
       } catch (err) {
         setState((s) => ({ ...s, loading: false, error: "Failed to initialize wallet" }));
       }

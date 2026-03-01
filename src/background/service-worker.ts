@@ -402,9 +402,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     case "LOCKBOX_AUTH_TOKEN":
       if (message.payload?.user) {
-        chrome.storage.local.set({
-          [STORAGE_KEYS.ACCOUNT]: message.payload.user,
-        });
+        (async () => {
+          await chrome.storage.local.set({
+            [STORAGE_KEYS.ACCOUNT]: message.payload.user,
+          });
+          // Immediately sync to dashboard now that we have a token
+          triggerSyncPush();
+        })();
       }
       break;
   }
@@ -414,10 +418,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
   if (sender.url?.startsWith("https://dashboard.yourlockbox.dev")) {
     if (message.type === "LOCKBOX_AUTH_TOKEN") {
-      chrome.storage.local.set({
-        [STORAGE_KEYS.ACCOUNT]: message.payload?.user,
-      });
-      sendResponse({ success: true });
+      (async () => {
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.ACCOUNT]: message.payload?.user,
+        });
+        sendResponse({ success: true });
+        // Immediately sync to dashboard now that we have a token
+        triggerSyncPush();
+      })();
+      return true; // Keep sendResponse channel open for async
     }
   }
 });
@@ -430,6 +439,96 @@ chrome.commands.onCommand.addListener(async (command) => {
     } catch {}
   }
 });
+
+// ── Immediate Sync Push ──
+// Lightweight sync push that can run in the service worker without imports.
+// Decrypts the vault, extracts metadata, and pushes to the dashboard API.
+const DASHBOARD_API = "https://dashboard.yourlockbox.dev/api";
+
+async function triggerSyncPush() {
+  try {
+    const [accountData, sessionData, vaultData] = await Promise.all([
+      chrome.storage.local.get(STORAGE_KEYS.ACCOUNT),
+      chrome.storage.session.get(STORAGE_KEYS.DERIVED_KEY),
+      chrome.storage.local.get(STORAGE_KEYS.VAULT),
+    ]);
+
+    const token = accountData[STORAGE_KEYS.ACCOUNT]?.token;
+    const derivedKey = sessionData[STORAGE_KEYS.DERIVED_KEY];
+    const vault = vaultData[STORAGE_KEYS.VAULT];
+
+    if (!token || !vault) return; // Can't sync without token or vault
+
+    const encryptedString = JSON.stringify(vault);
+
+    // Compute checksum
+    const checksumBuf = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(encryptedString)
+    );
+    const checksum = Array.from(new Uint8Array(checksumBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Extract metadata from decrypted wallet if possible
+    let metadata = {
+      vaultCount: 0,
+      totalKeys: 0,
+      vaults: [] as any[],
+      services: [] as any[],
+      lastModified: new Date().toISOString(),
+    };
+
+    if (derivedKey) {
+      try {
+        const wallet = await decryptVault(vault, derivedKey);
+        const serviceMap = new Map<string, number>();
+        let totalKeys = 0;
+
+        const vaults = (wallet.vaults || []).map((v: any) => {
+          const svcSet = new Set<string>();
+          for (const k of v.keys || []) {
+            svcSet.add(k.service);
+            serviceMap.set(k.service, (serviceMap.get(k.service) || 0) + 1);
+          }
+          totalKeys += (v.keys || []).length;
+          return {
+            id: v.id,
+            name: v.name,
+            keyCount: (v.keys || []).length,
+            services: Array.from(svcSet),
+            lastModified: v.updatedAt || new Date().toISOString(),
+          };
+        });
+
+        metadata = {
+          vaultCount: wallet.vaults?.length || 0,
+          totalKeys,
+          vaults,
+          services: Array.from(serviceMap.entries()).map(([name, keyCount]) => ({
+            name,
+            keyCount,
+            keyNames: [],
+          })),
+          lastModified: new Date().toISOString(),
+        };
+      } catch {
+        // Decryption failed (wallet locked) — push with empty metadata
+      }
+    }
+
+    await fetch(`${DASHBOARD_API}/sync/push`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ encryptedVault: encryptedString, metadata, checksum }),
+    });
+  } catch {
+    // Sync failed silently — will retry on next trigger
+  }
+}
 
 // ── Startup ──
 chrome.runtime.onStartup.addListener(() => {
