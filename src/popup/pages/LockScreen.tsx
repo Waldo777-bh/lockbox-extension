@@ -68,8 +68,9 @@ function LockboxLogo() {
 }
 
 export function LockScreen() {
-  const { unlock, loading, error, setError } = useWalletContext();
+  const { unlock, loading, error, setError, navigate } = useWalletContext();
   const [password, setPassword] = useState("");
+  const [showForgot, setShowForgot] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -82,14 +83,6 @@ export function LockScreen() {
     if (!password.trim() || loading) return;
     setError(null);
     await unlock(password);
-  };
-
-  const handleForgotPassword = () => {
-    alert(
-      "To reset your wallet, you will need your 12-word recovery phrase.\n\n" +
-      "If you have your recovery phrase, you can restore your wallet from the welcome screen.\n\n" +
-      "Without the recovery phrase, your encrypted data cannot be recovered."
-    );
   };
 
   return (
@@ -166,7 +159,7 @@ export function LockScreen() {
       </motion.form>
 
       <motion.button
-        onClick={handleForgotPassword}
+        onClick={() => setShowForgot(!showForgot)}
         className="mt-4 text-xs text-lockbox-text-muted hover:text-lockbox-accent transition-colors cursor-pointer"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -174,6 +167,32 @@ export function LockScreen() {
       >
         Forgot password?
       </motion.button>
+
+      {/* Forgot password recovery panel */}
+      {showForgot && (
+        <motion.div
+          className="mt-3 w-full bg-lockbox-surface border border-lockbox-border rounded-xl p-4"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+        >
+          <p className="text-xs text-lockbox-text-secondary leading-relaxed mb-3">
+            To reset your wallet, you will need your <strong className="text-lockbox-text">12-word recovery phrase</strong>.
+            Without it, your encrypted data cannot be recovered.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate("import-wallet")}
+            className="w-full py-2.5 rounded-lg font-semibold text-xs tracking-wide
+                       transition-all duration-200 cursor-pointer
+                       hover:shadow-md active:scale-[0.98]
+                       bg-lockbox-accent/15 text-lockbox-accent border border-lockbox-accent/30
+                       hover:bg-lockbox-accent/25"
+          >
+            Restore with Recovery Phrase
+          </button>
+        </motion.div>
+      )}
 
       <motion.p
         className="mt-auto pt-6 text-lockbox-text-muted text-[10px] text-center"
