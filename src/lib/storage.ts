@@ -30,6 +30,15 @@ export async function setEncryptedVault(vault: EncryptedVault): Promise<void> {
   return set(STORAGE_KEYS.VAULT, vault);
 }
 
+// ── Recovery Vault ──
+export async function getRecoveryVault(): Promise<EncryptedVault | null> {
+  return get<EncryptedVault>(STORAGE_KEYS.RECOVERY_VAULT);
+}
+
+export async function setRecoveryVault(vault: EncryptedVault): Promise<void> {
+  return set(STORAGE_KEYS.RECOVERY_VAULT, vault);
+}
+
 // ── Config ──
 export async function getConfig(): Promise<WalletConfig> {
   const config = await get<WalletConfig>(STORAGE_KEYS.CONFIG);

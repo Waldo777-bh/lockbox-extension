@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { DecryptedWallet, WalletStatus, WalletConfig, PopupPage, Vault, ApiKey, AuditEntry } from "@/types";
-import { getStatus, setStatus, getEncryptedVault, setEncryptedVault, getConfig, setConfig, getDerivedKey, setDerivedKey, clearDerivedKey, getAccount, setAccount } from "@/lib/storage";
+import { getStatus, setStatus, getEncryptedVault, setEncryptedVault, getConfig, setConfig, getDerivedKey, setDerivedKey, clearDerivedKey, getAccount, setAccount, setRecoveryVault } from "@/lib/storage";
 import { createVault, unlockVault, saveVault, createEmptyWallet, createVaultWithRecovery } from "@/crypto/vault";
 import { generateRecoveryPhrase } from "@/crypto/recovery";
 import { DEFAULT_CONFIG, FREE_TIER_LIMITS } from "@/lib/constants";
@@ -97,6 +97,8 @@ export function useWallet() {
       );
 
       await setEncryptedVault(encrypted);
+      // Also store the recovery-encrypted vault for phrase-based recovery
+      await setRecoveryVault(recoveryEncrypted);
       await setStatus("unlocked");
       await setDerivedKey(derivedKey);
       await setConfig(DEFAULT_CONFIG);
@@ -300,6 +302,45 @@ export function useWallet() {
     [state.wallet, persistWallet]
   );
 
+  // Delete vault
+  const deleteVault = useCallback(
+    async (vaultId: string) => {
+      if (!state.wallet) return;
+
+      // Don't allow deleting the last vault
+      if (state.wallet.vaults.length <= 1) {
+        setState((s) => ({ ...s, error: "Cannot delete the last vault" }));
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const vault = state.wallet.vaults.find((v) => v.id === vaultId);
+
+      const updated: DecryptedWallet = {
+        ...state.wallet,
+        vaults: state.wallet.vaults.filter((v) => v.id !== vaultId),
+        auditLog: vault
+          ? [
+              ...vault.keys.map((k) => ({
+                id: generateId(),
+                action: "deleted" as const,
+                keyId: k.id,
+                keyName: k.name,
+                service: k.service,
+                vaultId: vault.id,
+                vaultName: vault.name,
+                timestamp: now,
+              })),
+              ...state.wallet.auditLog,
+            ].slice(0, 500)
+          : state.wallet.auditLog,
+      };
+
+      await persistWallet(updated);
+    },
+    [state.wallet, persistWallet]
+  );
+
   // Add vault
   const addVault = useCallback(
     async (name: string, description: string, icon: string) => {
@@ -401,6 +442,28 @@ export function useWallet() {
     [state.wallet, persistWallet]
   );
 
+  // Change password
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const vault = await getEncryptedVault();
+      if (!vault) throw new Error("No vault found");
+
+      // This will throw if password is wrong
+      const { wallet: decryptedWallet } = await unlockVault(currentPassword, vault);
+
+      // Re-encrypt with new password
+      const { encrypted, derivedKey } = await createVault(newPassword, decryptedWallet);
+
+      await setEncryptedVault(encrypted);
+      await setDerivedKey(derivedKey);
+      derivedKeyRef.current = derivedKey;
+      saltRef.current = encrypted.salt;
+
+      setState((s) => ({ ...s, wallet: decryptedWallet }));
+    },
+    []
+  );
+
   // Update config
   const updateConfig = useCallback(
     async (updates: Partial<WalletConfig>) => {
@@ -420,8 +483,10 @@ export function useWallet() {
     addKey,
     updateKey,
     deleteKey,
+    deleteVault,
     addVault,
     updateVault,
+    changePassword,
     recordAccess,
     updateConfig,
     persistWallet,

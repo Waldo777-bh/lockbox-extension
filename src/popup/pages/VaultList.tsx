@@ -13,8 +13,10 @@ import {
   Briefcase,
   Folder,
   Pencil,
+  Trash2,
   Check,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import { useWalletContext } from "../App";
 import { getServiceName, getServiceColor } from "@/services/serviceRegistry";
@@ -39,14 +41,19 @@ function VaultCard({
   vault,
   onKeyClick,
   onRename,
+  onDelete,
+  canDelete,
 }: {
   vault: VaultType;
   onKeyClick: (key: ApiKey) => void;
   onRename: (vaultId: string, name: string) => void;
+  onDelete: (vaultId: string) => void;
+  canDelete: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(vault.name);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const IconComponent = getVaultIcon(vault.icon);
 
   const handleSaveRename = () => {
@@ -107,13 +114,22 @@ function VaultCard({
           )}
         </div>
         {!editing && (
-          <button
-            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-            className="p-1.5 rounded-md hover:bg-lockbox-surface transition-colors text-lockbox-text-muted hover:text-lockbox-text-secondary cursor-pointer flex-shrink-0"
-            title="Rename vault"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+              className="p-1.5 rounded-md hover:bg-lockbox-surface transition-colors text-lockbox-text-muted hover:text-lockbox-text-secondary cursor-pointer flex-shrink-0"
+              title="Rename vault"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirmingDelete(true); }}
+              className="p-1.5 rounded-md hover:bg-lockbox-danger/10 transition-colors text-lockbox-text-muted hover:text-lockbox-danger cursor-pointer flex-shrink-0"
+              title="Delete vault"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </>
         )}
         <button
           onClick={() => setExpanded(!expanded)}
@@ -126,6 +142,61 @@ function VaultCard({
           )}
         </button>
       </div>
+
+      {/* Delete confirmation */}
+      <AnimatePresence>
+        {confirmingDelete && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="border-t border-lockbox-border bg-lockbox-danger/5 px-3.5 py-2.5">
+              {!canDelete ? (
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-lockbox-danger flex-shrink-0" />
+                  <p className="text-xs text-lockbox-danger flex-1">Cannot delete the last vault.</p>
+                  <button
+                    onClick={() => setConfirmingDelete(false)}
+                    className="px-2 py-1 rounded-md text-xs font-medium text-lockbox-text-secondary hover:bg-lockbox-surface transition-colors border border-lockbox-border"
+                  >
+                    OK
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-lockbox-danger flex-shrink-0" />
+                    <p className="text-xs text-lockbox-danger">
+                      Delete {vault.name}? This will remove all keys in this vault.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConfirmingDelete(false)}
+                      className="flex-1 py-1.5 rounded-md text-xs font-medium text-lockbox-text-secondary hover:bg-lockbox-surface transition-colors border border-lockbox-border"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        onDelete(vault.id);
+                        setConfirmingDelete(false);
+                      }}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md bg-lockbox-danger text-white text-xs font-semibold hover:bg-lockbox-danger/90 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Expanded key list */}
       <AnimatePresence>
@@ -272,7 +343,7 @@ function CreateVaultForm({
 
 // ── Main VaultList ──
 export function VaultList() {
-  const { navigate, wallet, config, addVault, updateVault, setSelectedKey, error, setError } = useWalletContext();
+  const { navigate, wallet, config, addVault, updateVault, deleteVault, setSelectedKey, error, setError } = useWalletContext();
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -311,6 +382,14 @@ export function VaultList() {
       await updateVault(vaultId, { name: newName });
     } catch (err: any) {
       setError(err.message || "Failed to rename vault");
+    }
+  };
+
+  const handleDeleteVault = async (vaultId: string) => {
+    try {
+      await deleteVault(vaultId);
+    } catch (err: any) {
+      setError(err.message || "Failed to delete vault");
     }
   };
 
@@ -393,6 +472,8 @@ export function VaultList() {
               vault={vault}
               onKeyClick={handleKeyClick}
               onRename={handleRenameVault}
+              onDelete={handleDeleteVault}
+              canDelete={vaults.length > 1}
             />
           ))
         ) : (

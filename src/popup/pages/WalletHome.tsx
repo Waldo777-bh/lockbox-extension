@@ -454,9 +454,10 @@ export function WalletHome() {
     );
   }, [filteredKeys]);
 
-  const showToast = useCallback((msg: string) => {
-    setToastMessage(msg);
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
     setToastVisible(true);
+    setTimeout(() => setToastVisible(false), 2000);
   }, []);
 
   const handleKeyClick = useCallback(
@@ -471,13 +472,19 @@ export function WalletHome() {
     async (key: ApiKey) => {
       try {
         await navigator.clipboard.writeText(key.value);
+        const clearSeconds = config.clipboardClearSeconds;
+        if (clearSeconds > 0) {
+          setTimeout(() => {
+            navigator.clipboard.writeText("").catch(() => {});
+          }, clearSeconds * 1000);
+        }
         await recordAccess(key.id, "copied");
         showToast("Key copied to clipboard");
       } catch {
         showToast("Failed to copy key");
       }
     },
-    [recordAccess, showToast]
+    [recordAccess, showToast, config.clipboardClearSeconds]
   );
 
   const totalKeys = allKeys.length;

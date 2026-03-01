@@ -1,0 +1,547 @@
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { ArrowLeft, Eye, EyeOff, Check, X, Loader2, AlertCircle } from "lucide-react";
+import { useWalletContext } from "../App";
+import { getPasswordStrength } from "@/lib/utils";
+import { validateRecoveryPhrase } from "@/crypto/recovery";
+import { unlockVaultWithRecovery, createVaultWithRecovery } from "@/crypto/vault";
+import {
+  getRecoveryVault,
+  setEncryptedVault,
+  setRecoveryVault,
+  setStatus,
+  setDerivedKey,
+  setConfig,
+  setAccount,
+} from "@/lib/storage";
+import { DEFAULT_CONFIG } from "@/lib/constants";
+
+export function ImportWallet() {
+  const { navigate, setError, error } = useWalletContext();
+
+  // Recovery phrase state
+  const [phraseWords, setPhraseWords] = useState<string[]>(Array(12).fill(""));
+  const [phraseInput, setPhraseInput] = useState("");
+  const [useTextarea, setUseTextarea] = useState(true);
+
+  // Password state
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [step, setStep] = useState<"phrase" | "password">("phrase");
+
+  // Derived values
+  const phrase = useTextarea
+    ? phraseInput.trim().toLowerCase().replace(/\s+/g, " ")
+    : phraseWords.map((w) => w.trim().toLowerCase()).join(" ");
+
+  const isPhraseValid = validateRecoveryPhrase(phrase);
+  const wordCount = phrase.split(" ").filter((w) => w.length > 0).length;
+
+  const strength = getPasswordStrength(password);
+  const passwordsMatch = password.length > 0 && password === confirmPassword;
+  const hasMinLength = password.length >= 8;
+  const canSubmitPassword =
+    passwordsMatch &&
+    hasMinLength &&
+    (strength.label === "fair" ||
+      strength.label === "strong" ||
+      strength.label === "very strong") &&
+    !loading;
+
+  const strengthPercent =
+    strength.score === 1 ? 25 : strength.score === 2 ? 50 : strength.score === 3 ? 75 : 100;
+
+  const handlePhraseNext = () => {
+    setLocalError(null);
+    if (!isPhraseValid) {
+      setLocalError("Invalid recovery phrase. Please check your words and try again.");
+      return;
+    }
+    setStep("password");
+  };
+
+  const handleWordChange = (index: number, value: string) => {
+    // Handle paste of full phrase into first word
+    const words = value.trim().split(/\s+/);
+    if (words.length > 1 && index === 0) {
+      const newWords = [...phraseWords];
+      words.forEach((w, i) => {
+        if (i < 12) newWords[i] = w.toLowerCase();
+      });
+      setPhraseWords(newWords);
+      return;
+    }
+
+    const newWords = [...phraseWords];
+    newWords[index] = value.toLowerCase();
+    setPhraseWords(newWords);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmitPassword) return;
+
+    setLoading(true);
+    setLocalError(null);
+    setError(null);
+
+    try {
+      // Step 1: Try to get the recovery vault from local storage
+      const recoveryVault = await getRecoveryVault();
+
+      if (!recoveryVault) {
+        setLocalError(
+          "No recovery vault found. The wallet must have been created on this device, or the recovery data has been cleared."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Decrypt the vault using the recovery phrase
+      let decryptedWallet;
+      try {
+        const result = await unlockVaultWithRecovery(phrase, recoveryVault);
+        decryptedWallet = result.wallet;
+      } catch {
+        setLocalError(
+          "Recovery phrase does not match the stored vault. Please verify your phrase is correct."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // Step 3: Re-encrypt with the new password (and generate a new recovery vault for the same phrase)
+      const { encrypted, derivedKey, recoveryEncrypted } = await createVaultWithRecovery(
+        password,
+        phrase,
+        decryptedWallet
+      );
+
+      // Step 4: Store everything
+      await setEncryptedVault(encrypted);
+      await setRecoveryVault(recoveryEncrypted);
+      await setStatus("unlocked");
+      await setDerivedKey(derivedKey);
+      await setConfig(DEFAULT_CONFIG);
+      await setAccount({
+        email: null,
+        name: "My Wallet",
+        walletId: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+      });
+
+      // Step 5: Navigate to home (reload the app state)
+      // We need to reload the page to reinitialize the wallet hook with the new data
+      window.location.reload();
+    } catch (err: any) {
+      setLocalError(err.message || "Failed to import wallet. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  const displayError = localError || error;
+
+  if (step === "phrase") {
+    return (
+      <div className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
+        {/* Header */}
+        <motion.div
+          className="flex items-center gap-3 mb-4"
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <button
+            onClick={() => navigate("welcome")}
+            className="p-1.5 rounded-lg hover:bg-lockbox-surface transition-colors cursor-pointer"
+          >
+            <ArrowLeft size={18} className="text-lockbox-text-secondary" />
+          </button>
+          <h1 className="text-lg font-semibold text-lockbox-text">
+            Import Wallet
+          </h1>
+        </motion.div>
+
+        <motion.p
+          className="text-sm text-lockbox-text-secondary mb-4 leading-relaxed"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.3 }}
+        >
+          Enter your 12-word recovery phrase to restore your wallet.
+        </motion.p>
+
+        <motion.div
+          className="flex flex-col gap-4 flex-1"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.4 }}
+        >
+          {/* Input mode toggle */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setUseTextarea(true)}
+              className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
+                useTextarea
+                  ? "border-lockbox-accent text-lockbox-accent bg-lockbox-accent/10"
+                  : "border-lockbox-border text-lockbox-text-secondary hover:border-lockbox-border-hover"
+              }`}
+            >
+              Paste Phrase
+            </button>
+            <button
+              type="button"
+              onClick={() => setUseTextarea(false)}
+              className={`flex-1 py-1.5 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
+                !useTextarea
+                  ? "border-lockbox-accent text-lockbox-accent bg-lockbox-accent/10"
+                  : "border-lockbox-border text-lockbox-text-secondary hover:border-lockbox-border-hover"
+              }`}
+            >
+              Word by Word
+            </button>
+          </div>
+
+          {/* Phrase input */}
+          {useTextarea ? (
+            <div>
+              <label className="block text-xs font-medium text-lockbox-text-secondary mb-1.5">
+                Recovery Phrase
+              </label>
+              <textarea
+                value={phraseInput}
+                onChange={(e) => setPhraseInput(e.target.value)}
+                placeholder="Enter your 12-word recovery phrase, separated by spaces"
+                rows={4}
+                className="w-full bg-lockbox-surface border border-lockbox-border rounded-lg px-3.5 py-2.5
+                           text-sm text-lockbox-text placeholder:text-lockbox-text-muted
+                           focus:border-lockbox-accent transition-colors resize-none
+                           font-mono leading-relaxed"
+                spellCheck={false}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+              />
+              <div className="flex items-center justify-between mt-1.5">
+                <p className={`text-xs ${wordCount === 12 ? "text-lockbox-accent" : "text-lockbox-text-muted"}`}>
+                  {wordCount}/12 words
+                </p>
+                {wordCount === 12 && isPhraseValid && (
+                  <p className="text-xs text-lockbox-accent flex items-center gap-1">
+                    <Check size={12} /> Valid phrase
+                  </p>
+                )}
+                {wordCount === 12 && !isPhraseValid && (
+                  <p className="text-xs text-lockbox-danger flex items-center gap-1">
+                    <X size={12} /> Invalid phrase
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-medium text-lockbox-text-secondary mb-1.5">
+                Recovery Phrase
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {phraseWords.map((word, i) => (
+                  <div key={i} className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-lockbox-text-muted font-mono">
+                      {i + 1}.
+                    </span>
+                    <input
+                      type="text"
+                      value={word}
+                      onChange={(e) => handleWordChange(i, e.target.value)}
+                      className="w-full bg-lockbox-surface border border-lockbox-border rounded-md pl-7 pr-2 py-2
+                                 text-xs text-lockbox-text placeholder:text-lockbox-text-muted
+                                 focus:border-lockbox-accent transition-colors font-mono"
+                      spellCheck={false}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-end mt-1.5">
+                {isPhraseValid && (
+                  <p className="text-xs text-lockbox-accent flex items-center gap-1">
+                    <Check size={12} /> Valid phrase
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {displayError && (
+            <motion.div
+              className="bg-lockbox-danger/10 border border-lockbox-danger/30 rounded-lg px-3.5 py-2.5 flex items-start gap-2"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <AlertCircle size={14} className="text-lockbox-danger flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-lockbox-danger">{displayError}</p>
+            </motion.div>
+          )}
+
+          {/* Security note */}
+          <div className="bg-lockbox-surface rounded-lg p-3.5 border border-lockbox-border">
+            <p className="text-xs text-lockbox-text-secondary leading-relaxed">
+              Your recovery phrase is used to decrypt your wallet data locally. It is never
+              sent to any server.
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Continue button */}
+        <motion.div
+          className="mt-auto pt-4 pb-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+        >
+          <button
+            type="button"
+            onClick={handlePhraseNext}
+            disabled={!isPhraseValid}
+            className="w-full py-3 rounded-xl font-semibold text-sm tracking-wide
+                       transition-all duration-200 cursor-pointer
+                       disabled:opacity-40 disabled:cursor-not-allowed
+                       hover:shadow-lg hover:shadow-lockbox-accent/20 active:scale-[0.98]"
+            style={{
+              backgroundColor: "#00d87a",
+              color: "#0f0f14",
+            }}
+          >
+            Continue
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Step 2: Password entry
+  return (
+    <div className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
+      {/* Header */}
+      <motion.div
+        className="flex items-center gap-3 mb-4"
+        initial={{ opacity: 0, x: -12 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <button
+          onClick={() => {
+            setStep("phrase");
+            setLocalError(null);
+          }}
+          className="p-1.5 rounded-lg hover:bg-lockbox-surface transition-colors cursor-pointer"
+        >
+          <ArrowLeft size={18} className="text-lockbox-text-secondary" />
+        </button>
+        <h1 className="text-lg font-semibold text-lockbox-text">
+          Set New Password
+        </h1>
+      </motion.div>
+
+      <motion.p
+        className="text-sm text-lockbox-text-secondary mb-4 leading-relaxed"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.3 }}
+      >
+        Create a new master password for your recovered wallet.
+      </motion.p>
+
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col">
+        <motion.div
+          className="flex flex-col gap-4"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+        >
+          {/* Password input */}
+          <div>
+            <label className="block text-xs font-medium text-lockbox-text-secondary mb-1.5">
+              New Master Password
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter a strong password"
+                className="w-full bg-lockbox-surface border border-lockbox-border rounded-lg px-3.5 py-2.5 pr-10
+                           text-sm text-lockbox-text placeholder:text-lockbox-text-muted
+                           focus:border-lockbox-accent transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-lockbox-text-muted
+                           hover:text-lockbox-text-secondary transition-colors cursor-pointer"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            {/* Strength meter */}
+            {password.length > 0 && (
+              <motion.div
+                className="mt-2.5"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="h-1.5 w-full bg-lockbox-surface rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: strength.color }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${strengthPercent}%` }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                </div>
+                <p
+                  className="text-xs mt-1 font-medium capitalize"
+                  style={{ color: strength.color }}
+                >
+                  {strength.label}
+                </p>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Confirm password */}
+          <div>
+            <label className="block text-xs font-medium text-lockbox-text-secondary mb-1.5">
+              Confirm Password
+            </label>
+            <div className="relative">
+              <input
+                type={showConfirm ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm your password"
+                className="w-full bg-lockbox-surface border border-lockbox-border rounded-lg px-3.5 py-2.5 pr-10
+                           text-sm text-lockbox-text placeholder:text-lockbox-text-muted
+                           focus:border-lockbox-accent transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm(!showConfirm)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-lockbox-text-muted
+                           hover:text-lockbox-text-secondary transition-colors cursor-pointer"
+              >
+                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {confirmPassword.length > 0 && !passwordsMatch && (
+              <motion.p
+                className="text-xs mt-1 text-lockbox-danger"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                Passwords do not match
+              </motion.p>
+            )}
+          </div>
+
+          {/* Requirements */}
+          <div className="bg-lockbox-surface rounded-lg p-3.5 border border-lockbox-border">
+            <p className="text-xs font-medium text-lockbox-text-secondary mb-2">
+              Requirements
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <Requirement met={hasMinLength} label="At least 8 characters" />
+              <Requirement
+                met={
+                  strength.label === "fair" ||
+                  strength.label === "strong" ||
+                  strength.label === "very strong"
+                }
+                label="Password strength at least fair"
+              />
+              <Requirement met={passwordsMatch} label="Passwords match" />
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Error */}
+        {displayError && (
+          <motion.div
+            className="mt-4 bg-lockbox-danger/10 border border-lockbox-danger/30 rounded-lg px-3.5 py-2.5 flex items-start gap-2"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <AlertCircle size={14} className="text-lockbox-danger flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-lockbox-danger">{displayError}</p>
+          </motion.div>
+        )}
+
+        {/* Submit */}
+        <motion.div
+          className="mt-auto pt-4 pb-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+        >
+          <button
+            type="submit"
+            disabled={!canSubmitPassword}
+            className="w-full py-3 rounded-xl font-semibold text-sm tracking-wide
+                       transition-all duration-200 cursor-pointer
+                       disabled:opacity-40 disabled:cursor-not-allowed
+                       hover:shadow-lg hover:shadow-lockbox-accent/20 active:scale-[0.98]"
+            style={{
+              backgroundColor: "#00d87a",
+              color: "#0f0f14",
+            }}
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                Recovering Wallet...
+              </span>
+            ) : (
+              "Recover Wallet"
+            )}
+          </button>
+        </motion.div>
+      </form>
+    </div>
+  );
+}
+
+function Requirement({ met, label }: { met: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+        style={{
+          backgroundColor: met ? "rgba(0, 216, 122, 0.15)" : "rgba(107, 114, 128, 0.15)",
+        }}
+      >
+        {met ? (
+          <Check size={10} className="text-lockbox-accent" />
+        ) : (
+          <X size={10} className="text-lockbox-text-muted" />
+        )}
+      </div>
+      <span
+        className={`text-xs ${met ? "text-lockbox-text-secondary" : "text-lockbox-text-muted"}`}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}

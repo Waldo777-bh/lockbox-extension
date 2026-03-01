@@ -23,6 +23,7 @@ export const FREE_TIER_LIMITS = {
 
 export const STORAGE_KEYS = {
   VAULT: "lockbox_vault",
+  RECOVERY_VAULT: "lockbox_recovery_vault",
   CONFIG: "lockbox_config",
   STATUS: "lockbox_status",
   ACCOUNT: "lockbox_account",
