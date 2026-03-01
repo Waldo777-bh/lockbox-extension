@@ -30,6 +30,7 @@ import { AUTO_LOCK_OPTIONS, CLIPBOARD_CLEAR_OPTIONS, DASHBOARD_URL } from "@/lib
 import { getAccount, setAccount, clearAllData, getRecoveryVault } from "@/lib/storage";
 import { getPasswordStrength } from "@/lib/utils";
 import { validateRecoveryPhrase } from "@/crypto/recovery";
+import { resetSync } from "@/sync/api";
 
 // ── Toggle switch ──
 function Toggle({
@@ -826,6 +827,8 @@ export function Settings() {
   const handleDeleteWallet = async () => {
     setDeleting(true);
     try {
+      // Clear dashboard sync data before wiping local storage (needs auth token)
+      await resetSync().catch(() => {});
       await clearAllData();
       // Reload the popup to go back to welcome screen
       window.location.reload();

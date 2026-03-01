@@ -127,6 +127,9 @@ export function useWallet() {
         page: "recovery-phrase",
         loading: false,
       }));
+
+      // Sync the new wallet to dashboard immediately (replaces any stale data)
+      syncPush(walletWithRecoveryKey).catch(() => {});
     } catch (err: any) {
       setState((s) => ({ ...s, loading: false, error: err.message || "Failed to create wallet" }));
     }
