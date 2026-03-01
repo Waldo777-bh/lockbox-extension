@@ -27,23 +27,24 @@ export function AddKey() {
   const [expiresAt, setExpiresAt] = useState("");
   const [saving, setSaving] = useState(false);
   const [serviceDropdownOpen, setServiceDropdownOpen] = useState(false);
-  const [serviceQuery, setServiceQuery] = useState("");
+  const [serviceInput, setServiceInput] = useState("");
+  const serviceInputRef = useRef<HTMLInputElement>(null);
 
   const serviceOptions = useMemo(() => getServiceOptions(), []);
 
   const filteredServiceOptions = useMemo(() => {
-    if (!serviceQuery.trim()) return serviceOptions;
-    const lower = serviceQuery.toLowerCase();
+    if (!serviceInput.trim()) return serviceOptions;
+    const lower = serviceInput.toLowerCase();
     return serviceOptions.filter((opt) =>
-      opt.label.toLowerCase().includes(lower)
+      opt.label.toLowerCase().includes(lower) || opt.value.toLowerCase().includes(lower)
     );
-  }, [serviceOptions, serviceQuery]);
+  }, [serviceOptions, serviceInput]);
 
-  // Auto-suggest key name when service is selected
-  const handleServiceSelect = (svcKey: string) => {
+  // When user picks a preset from the dropdown
+  const handleServiceSelect = (svcKey: string, label: string) => {
     setService(svcKey);
+    setServiceInput(label);
     setServiceDropdownOpen(false);
-    setServiceQuery("");
     // Auto-suggest a name based on the service
     const svc = SERVICES[svcKey];
     if (svc && !name) {
@@ -51,7 +52,32 @@ export function AddKey() {
     }
   };
 
-  const selectedServiceLabel = serviceOptions.find((o) => o.value === service)?.label ?? (service ? service : "");
+  // When the input changes, keep service in sync with what the user typed
+  const handleServiceInputChange = (val: string) => {
+    setServiceInput(val);
+    setServiceDropdownOpen(true);
+    // Check if the typed value exactly matches a preset
+    const match = serviceOptions.find((o) => o.label.toLowerCase() === val.toLowerCase());
+    if (match) {
+      setService(match.value);
+    } else {
+      // Use the raw text as a custom service
+      setService(val.trim());
+    }
+  };
+
+  // Close dropdown when clicking outside
+  const serviceDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!serviceDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(e.target as Node)) {
+        setServiceDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [serviceDropdownOpen]);
 
   const canSave = service.trim() && name.trim() && value.trim() && vaultId && !saving;
 
@@ -101,60 +127,45 @@ export function AddKey() {
         onSubmit={handleSave}
         className="flex-1 overflow-y-auto scrollbar-thin px-4 py-4 flex flex-col gap-4"
       >
-        {/* Service selector */}
-        <div className="relative">
+        {/* Service selector — combobox: type freely or pick from suggestions */}
+        <div className="relative" ref={serviceDropdownRef}>
           <label className="block text-xs font-medium text-lockbox-text-secondary mb-1.5">
             Service
           </label>
-          <button
-            type="button"
-            onClick={() => setServiceDropdownOpen(!serviceDropdownOpen)}
-            className="w-full flex items-center justify-between bg-lockbox-surface border border-lockbox-border rounded-lg px-3.5 py-2.5 text-sm text-lockbox-text focus:border-lockbox-accent transition-colors"
-          >
-            <span className={selectedServiceLabel ? "text-lockbox-text" : "text-lockbox-text-muted"}>
-              {selectedServiceLabel || "Select a service..."}
-            </span>
-            <ChevronDown className="w-4 h-4 text-lockbox-text-muted" />
-          </button>
+          <div className="relative">
+            <input
+              ref={serviceInputRef}
+              type="text"
+              value={serviceInput}
+              onChange={(e) => handleServiceInputChange(e.target.value)}
+              onFocus={() => setServiceDropdownOpen(true)}
+              placeholder="Type or select a service..."
+              className="w-full bg-lockbox-surface border border-lockbox-border rounded-lg px-3.5 py-2.5 pr-8 text-sm text-lockbox-text placeholder:text-lockbox-text-muted focus:border-lockbox-accent transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => setServiceDropdownOpen(!serviceDropdownOpen)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-lockbox-text-muted hover:text-lockbox-text-secondary cursor-pointer"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
 
-          {serviceDropdownOpen && (
+          {serviceDropdownOpen && filteredServiceOptions.length > 0 && (
             <motion.div
               className="absolute z-50 mt-1 w-full bg-lockbox-surface border border-lockbox-border rounded-lg shadow-xl overflow-hidden"
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <div className="p-2">
-                <input
-                  type="text"
-                  value={serviceQuery}
-                  onChange={(e) => setServiceQuery(e.target.value)}
-                  placeholder="Search services..."
-                  className="w-full bg-lockbox-bg border border-lockbox-border rounded-md px-2.5 py-1.5 text-xs text-lockbox-text placeholder:text-lockbox-text-muted focus:border-lockbox-accent transition-colors"
-                  autoFocus
-                />
-              </div>
               <div className="max-h-40 overflow-y-auto scrollbar-thin">
-                {/* Custom entry option when query doesn't match */}
-                {serviceQuery.trim() && !filteredServiceOptions.some(o => o.label.toLowerCase() === serviceQuery.toLowerCase()) && (
-                  <button
-                    type="button"
-                    onClick={() => handleServiceSelect(serviceQuery.trim().toLowerCase())}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-lockbox-border transition-colors text-lockbox-accent"
-                  >
-                    <span className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 bg-lockbox-accent/15 text-lockbox-accent">
-                      +
-                    </span>
-                    Use &ldquo;{serviceQuery.trim()}&rdquo; as custom service
-                  </button>
-                )}
                 {filteredServiceOptions.map((opt) => {
                   const svc = SERVICES[opt.value];
                   return (
                     <button
                       type="button"
                       key={opt.value}
-                      onClick={() => handleServiceSelect(opt.value)}
+                      onClick={() => handleServiceSelect(opt.value, opt.label)}
                       className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-lockbox-border transition-colors ${
                         service === opt.value ? "bg-lockbox-accent/10 text-lockbox-accent" : "text-lockbox-text"
                       }`}
@@ -172,9 +183,6 @@ export function AddKey() {
                     </button>
                   );
                 })}
-                {filteredServiceOptions.length === 0 && !serviceQuery.trim() && (
-                  <p className="px-3 py-2 text-xs text-lockbox-text-muted">No services found</p>
-                )}
               </div>
             </motion.div>
           )}

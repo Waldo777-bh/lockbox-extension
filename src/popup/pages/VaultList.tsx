@@ -8,11 +8,13 @@ import {
   KeyRound,
   Crown,
   Loader2,
-  Vault,
   Box,
   Shield,
   Briefcase,
   Folder,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { useWalletContext } from "../App";
 import { getServiceName, getServiceColor } from "@/services/serviceRegistry";
@@ -36,12 +38,28 @@ function getVaultIcon(icon: string) {
 function VaultCard({
   vault,
   onKeyClick,
+  onRename,
 }: {
   vault: VaultType;
   onKeyClick: (key: ApiKey) => void;
+  onRename: (vaultId: string, name: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(vault.name);
   const IconComponent = getVaultIcon(vault.icon);
+
+  const handleSaveRename = () => {
+    if (editName.trim() && editName.trim() !== vault.name) {
+      onRename(vault.id, editName.trim());
+    }
+    setEditing(false);
+  };
+
+  const handleCancelRename = () => {
+    setEditName(vault.name);
+    setEditing(false);
+  };
 
   return (
     <motion.div
@@ -50,26 +68,64 @@ function VaultCard({
       animate={{ opacity: 1, y: 0 }}
     >
       {/* Vault header */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-3.5 py-3 hover:bg-lockbox-surface/50 transition-colors text-left"
-      >
-        <div className="w-9 h-9 rounded-lg bg-lockbox-accent/10 border border-lockbox-accent/20 flex items-center justify-center flex-shrink-0">
+      <div className="flex items-center gap-3 px-3.5 py-3">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-9 h-9 rounded-lg bg-lockbox-accent/10 border border-lockbox-accent/20 flex items-center justify-center flex-shrink-0 hover:bg-lockbox-accent/15 transition-colors"
+        >
           <IconComponent className="w-4 h-4 text-lockbox-accent" />
+        </button>
+        <div className="flex-1 min-w-0" onClick={() => !editing && setExpanded(!expanded)}>
+          {editing ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveRename();
+                  if (e.key === "Escape") handleCancelRename();
+                }}
+                autoFocus
+                className="flex-1 bg-lockbox-surface border border-lockbox-accent rounded px-2 py-1 text-sm text-lockbox-text focus:outline-none"
+              />
+              <button onClick={handleSaveRename} className="p-1 rounded hover:bg-lockbox-surface transition-colors text-lockbox-accent cursor-pointer">
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={handleCancelRename} className="p-1 rounded hover:bg-lockbox-surface transition-colors text-lockbox-text-muted cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-lockbox-text truncate cursor-pointer">{vault.name}</p>
+              <p className="text-[10px] text-lockbox-text-muted">
+                {vault.keys.length} key{vault.keys.length !== 1 ? "s" : ""} &middot; Updated{" "}
+                {timeAgo(vault.updatedAt)}
+              </p>
+            </>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-lockbox-text truncate">{vault.name}</p>
-          <p className="text-[10px] text-lockbox-text-muted">
-            {vault.keys.length} key{vault.keys.length !== 1 ? "s" : ""} &middot; Updated{" "}
-            {timeAgo(vault.updatedAt)}
-          </p>
-        </div>
-        {expanded ? (
-          <ChevronDown className="w-4 h-4 text-lockbox-text-muted flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-lockbox-text-muted flex-shrink-0" />
+        {!editing && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+            className="p-1.5 rounded-md hover:bg-lockbox-surface transition-colors text-lockbox-text-muted hover:text-lockbox-text-secondary cursor-pointer flex-shrink-0"
+            title="Rename vault"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
         )}
-      </button>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex-shrink-0 p-1 cursor-pointer"
+        >
+          {expanded ? (
+            <ChevronDown className="w-4 h-4 text-lockbox-text-muted" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-lockbox-text-muted" />
+          )}
+        </button>
+      </div>
 
       {/* Expanded key list */}
       <AnimatePresence>
@@ -216,7 +272,7 @@ function CreateVaultForm({
 
 // ── Main VaultList ──
 export function VaultList() {
-  const { navigate, wallet, config, addVault, setSelectedKey, error, setError } = useWalletContext();
+  const { navigate, wallet, config, addVault, updateVault, setSelectedKey, error, setError } = useWalletContext();
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -248,6 +304,14 @@ export function VaultList() {
   const handleKeyClick = (key: ApiKey) => {
     setSelectedKey(key);
     navigate("key-detail");
+  };
+
+  const handleRenameVault = async (vaultId: string, newName: string) => {
+    try {
+      await updateVault(vaultId, { name: newName });
+    } catch (err: any) {
+      setError(err.message || "Failed to rename vault");
+    }
   };
 
   return (
@@ -328,6 +392,7 @@ export function VaultList() {
               key={vault.id}
               vault={vault}
               onKeyClick={handleKeyClick}
+              onRename={handleRenameVault}
             />
           ))
         ) : (

@@ -334,6 +334,26 @@ export function useWallet() {
     [state.wallet, state.config.tier, persistWallet]
   );
 
+  // Update vault (rename, description, icon)
+  const updateVault = useCallback(
+    async (vaultId: string, updates: { name?: string; description?: string; icon?: string }) => {
+      if (!state.wallet) return;
+      const now = new Date().toISOString();
+
+      const updated: DecryptedWallet = {
+        ...state.wallet,
+        vaults: state.wallet.vaults.map((v) =>
+          v.id === vaultId
+            ? { ...v, ...updates, updatedAt: now }
+            : v
+        ),
+      };
+
+      await persistWallet(updated);
+    },
+    [state.wallet, persistWallet]
+  );
+
   // Record key access
   const recordAccess = useCallback(
     async (keyId: string, action: AuditEntry["action"], site?: string) => {
@@ -401,6 +421,7 @@ export function useWallet() {
     updateKey,
     deleteKey,
     addVault,
+    updateVault,
     recordAccess,
     updateConfig,
     persistWallet,
