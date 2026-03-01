@@ -22,7 +22,7 @@ interface ParsedEntry {
 }
 
 export function ImportEnv() {
-  const { navigate, wallet, addKey, error, setError } = useWalletContext();
+  const { navigate, wallet, addKeys, error, setError } = useWalletContext();
 
   const [envContent, setEnvContent] = useState("");
   const [parsedEntries, setParsedEntries] = useState<ParsedEntry[]>([]);
@@ -78,16 +78,17 @@ export function ImportEnv() {
     setError(null);
 
     try {
-      for (const entry of toImport) {
-        await addKey(vaultId, {
+      await addKeys(
+        vaultId,
+        toImport.map((entry) => ({
           service: entry.service,
           name: entry.name,
           value: entry.value,
           notes: "Imported from .env file",
           expiresAt: null,
           favourite: false,
-        });
-      }
+        }))
+      );
       setImported(true);
       setTimeout(() => navigate("home"), 1200);
     } catch (err: any) {

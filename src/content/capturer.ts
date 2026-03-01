@@ -151,9 +151,18 @@ function showCaptureBar(keyInfo: { value: string; service: string; name: string 
 }
 
 // ── Watch for new key displays ──
-function initCapture() {
+async function initCapture() {
   // Guard against restricted pages where document.body may be null
   if (!document.body) return;
+
+  // Respect user's keyCaptureEnabled setting
+  try {
+    const result = await chrome.storage.local.get("lockbox_config");
+    const config = result.lockbox_config;
+    if (config && config.keyCaptureEnabled === false) return;
+  } catch {
+    // If storage access fails, proceed with default (enabled)
+  }
 
   // Scan on load
   const found = scanForKeys();
