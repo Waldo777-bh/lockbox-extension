@@ -32,10 +32,10 @@ export function CreateWallet() {
   };
 
   return (
-    <div className="flex-1 flex flex-col px-6 py-5">
+    <div className="flex-1 flex flex-col px-6 py-4 overflow-y-auto">
       {/* Header */}
       <motion.div
-        className="flex items-center gap-3 mb-6"
+        className="flex items-center gap-3 mb-4"
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3 }}
@@ -53,7 +53,7 @@ export function CreateWallet() {
 
       <form onSubmit={handleSubmit} className="flex-1 flex flex-col">
         <motion.div
-          className="flex flex-col gap-5"
+          className="flex flex-col gap-4"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, duration: 0.4 }}
@@ -178,7 +178,7 @@ export function CreateWallet() {
 
         {/* Submit */}
         <motion.div
-          className="mt-auto pt-6"
+          className="mt-auto pt-4 pb-1"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.4 }}
@@ -186,7 +186,7 @@ export function CreateWallet() {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="w-full py-3.5 rounded-xl font-semibold text-sm tracking-wide
+            className="w-full py-3 rounded-xl font-semibold text-sm tracking-wide
                        transition-all duration-200 cursor-pointer
                        disabled:opacity-40 disabled:cursor-not-allowed
                        hover:shadow-lg hover:shadow-lockbox-accent/20 active:scale-[0.98]"

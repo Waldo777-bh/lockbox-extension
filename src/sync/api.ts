@@ -4,14 +4,30 @@ import { DASHBOARD_URL } from "@/lib/constants";
 
 const API_BASE = `${DASHBOARD_URL}/api`;
 
-interface SyncPushPayload {
+interface VaultMetaSummary {
+  id: string;
+  name: string;
+  keyCount: number;
+  services: string[];
+  lastModified: string;
+}
+
+interface ServiceMetaSummary {
+  name: string;
+  keyCount: number;
+  keyNames: string[];
+}
+
+export interface SyncPushPayload {
   encryptedVault: string;
   metadata: {
     vaultCount: number;
-    keyCount: number;
-    services: string[];
+    totalKeys: number;
+    vaults: VaultMetaSummary[];
+    services: ServiceMetaSummary[];
     lastModified: string;
   };
+  checksum: string;
 }
 
 interface SyncPullResponse {

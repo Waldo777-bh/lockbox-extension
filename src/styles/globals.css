@@ -55,11 +55,17 @@
 }
 
 html,
-body,
-#root {
+body {
   width: 420px;
   height: 640px;
   overflow: hidden;
+}
+
+#root {
+  width: 420px;
+  height: 640px;
+  overflow-y: auto;
+  overflow-x: hidden;
   font-family: "Inter", system-ui, sans-serif;
   background-color: rgb(var(--lb-bg));
   color: rgb(var(--lb-text));
