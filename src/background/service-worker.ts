@@ -374,6 +374,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })();
       return true;
 
+    case "LOCKBOX_OPEN_WITH_KEY":
+      // Content script detected a key and user clicked "Save to Lockbox"
+      // Store the captured key data in session storage so the popup can read it
+      if (message.payload) {
+        (async () => {
+          try {
+            await chrome.storage.session.set({
+              lockbox_pending_capture: {
+                service: message.payload.service,
+                name: message.payload.name,
+                value: message.payload.value,
+                capturedAt: Date.now(),
+              },
+            });
+            // Open the popup
+            await (chrome.action as any).openPopup();
+          } catch {
+            // Fallback: open popup.html in a new tab
+            const url = chrome.runtime.getURL("popup.html");
+            chrome.tabs.create({ url });
+          }
+          lastActivity = Date.now();
+        })();
+      }
+      return true;
+
     case "LOCKBOX_AUTH_TOKEN":
       if (message.payload?.user) {
         chrome.storage.local.set({
