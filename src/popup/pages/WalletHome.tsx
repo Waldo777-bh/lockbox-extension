@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   Vault,
+  Box,
 } from "lucide-react";
 import { useWalletContext } from "../App";
 import { getServiceName, getServiceColor } from "@/services/serviceRegistry";
@@ -305,17 +306,20 @@ function FABMenu({
   onManual,
   onQuickPaste,
   onImportEnv,
+  onManageVaults,
 }: {
   open: boolean;
   onToggle: () => void;
   onManual: () => void;
   onQuickPaste: () => void;
   onImportEnv: () => void;
+  onManageVaults: () => void;
 }) {
   const menuItems = [
     { label: "Manual Entry", icon: <PenLine className="w-3.5 h-3.5" />, action: onManual },
     { label: "Quick Paste", icon: <ClipboardPaste className="w-3.5 h-3.5" />, action: onQuickPaste },
     { label: "Import .env", icon: <FileText className="w-3.5 h-3.5" />, action: onImportEnv },
+    { label: "Manage Vaults", icon: <Box className="w-3.5 h-3.5" />, action: onManageVaults },
   ];
 
   return (
@@ -373,17 +377,20 @@ function FABMenu({
 
 // ── Quick stats footer ──
 function StatsFooter() {
-  const { wallet, config } = useWalletContext();
+  const { wallet, config, navigate } = useWalletContext();
   const vaultCount = wallet?.vaults.length ?? 0;
   const keyCount = wallet ? countAllKeys(wallet.vaults) : 0;
   const lastSynced = config.lastSynced ? timeAgo(config.lastSynced) : "never";
 
   return (
-    <div className="px-4 py-2 border-t border-lockbox-border flex items-center justify-center">
+    <button
+      onClick={() => navigate("vault-list")}
+      className="w-full px-4 py-2 border-t border-lockbox-border flex items-center justify-center hover:bg-lockbox-surface/50 transition-colors cursor-pointer"
+    >
       <p className="text-[10px] text-lockbox-text-muted">
         {vaultCount} vault{vaultCount !== 1 ? "s" : ""} &middot; {keyCount} key{keyCount !== 1 ? "s" : ""} &middot; Last synced {lastSynced}
       </p>
-    </div>
+    </button>
   );
 }
 
@@ -536,6 +543,7 @@ export function WalletHome() {
         onManual={() => navigate("add-key")}
         onQuickPaste={() => navigate("quick-paste")}
         onImportEnv={() => navigate("import-env")}
+        onManageVaults={() => navigate("vault-list")}
       />
 
       {/* Toast notification */}
