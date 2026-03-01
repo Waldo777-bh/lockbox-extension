@@ -70,6 +70,10 @@ export interface ApiKey {
 export interface DecryptedWallet {
   vaults: Vault[];
   auditLog: AuditEntry[];
+  /** Base64-encoded recovery key material — stored inside encrypted wallet so it's
+   *  available whenever the wallet is decrypted (same pattern as MetaMask storing
+   *  the seed phrase in the vault). Never exposed outside the encrypted blob. */
+  _recoveryKeyB64?: string;
 }
 
 // ── Audit ──

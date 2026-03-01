@@ -124,6 +124,27 @@ export async function createVaultWithRecovery(
   return { encrypted, derivedKey, recoveryEncrypted };
 }
 
+/** Re-encrypt the wallet with the recovery key and return a fresh recovery vault.
+ *  Used by persistWallet to keep the recovery vault in sync on every save. */
+export async function saveRecoveryVault(
+  wallet: DecryptedWallet,
+  recoveryKeyB64: string
+): Promise<EncryptedVault> {
+  const recoveryKeyMaterial = base64ToBuffer(recoveryKeyB64);
+  const plaintext = JSON.stringify(wallet);
+  const salt = await generateSalt();
+  const { iv, ciphertext, tag } = await encrypt(plaintext, recoveryKeyMaterial);
+  const hmac = await computeHMAC(ciphertext, recoveryKeyMaterial);
+  return {
+    version: 1,
+    salt: bufferToBase64(salt.buffer as ArrayBuffer),
+    iv,
+    tag,
+    ciphertext,
+    hmac,
+  };
+}
+
 export function createEmptyWallet(): DecryptedWallet {
   const now = new Date().toISOString();
   return {

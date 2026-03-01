@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { DecryptedWallet, WalletStatus, WalletConfig, PopupPage, Vault, ApiKey, AuditEntry } from "@/types";
 import { getStatus, setStatus, getEncryptedVault, setEncryptedVault, getConfig, setConfig, getDerivedKey, setDerivedKey, clearDerivedKey, getAccount, setAccount, setRecoveryVault } from "@/lib/storage";
-import { createVault, unlockVault, saveVault, createEmptyWallet, createVaultWithRecovery } from "@/crypto/vault";
-import { generateRecoveryPhrase } from "@/crypto/recovery";
+import { createVault, unlockVault, saveVault, createEmptyWallet, createVaultWithRecovery, saveRecoveryVault } from "@/crypto/vault";
+import { generateRecoveryPhrase, recoveryPhraseToKeyB64 } from "@/crypto/recovery";
 import { DEFAULT_CONFIG, FREE_TIER_LIMITS } from "@/lib/constants";
 import { generateId, countAllKeys } from "@/lib/utils";
 import { syncPush } from "@/sync/syncEngine";
@@ -90,10 +90,17 @@ export function useWallet() {
       const phrase = generateRecoveryPhrase();
       const emptyWallet = createEmptyWallet();
 
+      // Embed recovery key inside wallet data so it's always available when decrypted
+      const recoveryKeyB64 = recoveryPhraseToKeyB64(phrase);
+      const walletWithRecoveryKey: DecryptedWallet = {
+        ...emptyWallet,
+        _recoveryKeyB64: recoveryKeyB64,
+      };
+
       const { encrypted, derivedKey, recoveryEncrypted } = await createVaultWithRecovery(
         password,
         phrase,
-        emptyWallet
+        walletWithRecoveryKey
       );
 
       await setEncryptedVault(encrypted);
@@ -115,7 +122,7 @@ export function useWallet() {
       setState((s) => ({
         ...s,
         status: "unlocked",
-        wallet: emptyWallet,
+        wallet: walletWithRecoveryKey,
         recoveryPhrase: phrase,
         page: "recovery-phrase",
         loading: false,
@@ -179,6 +186,17 @@ export function useWallet() {
     if (!derivedKeyRef.current || !saltRef.current) return;
     const encrypted = await saveVault(wallet, derivedKeyRef.current, saltRef.current);
     await setEncryptedVault(encrypted);
+
+    // Keep recovery vault in sync whenever the wallet has an embedded recovery key
+    if (wallet._recoveryKeyB64) {
+      try {
+        const recoveryVault = await saveRecoveryVault(wallet, wallet._recoveryKeyB64);
+        await setRecoveryVault(recoveryVault);
+      } catch {
+        // Non-critical — don't block persist if recovery vault update fails
+      }
+    }
+
     setState((s) => ({ ...s, wallet }));
 
     // Trigger sync in the background (don't await — fire and forget)
@@ -464,6 +482,27 @@ export function useWallet() {
     []
   );
 
+  // Set up recovery for wallets that were created before recovery vault was stored.
+  // User provides their recovery phrase → we derive the key, embed it in wallet data,
+  // and generate the recovery vault.
+  const setupRecovery = useCallback(
+    async (recoveryPhrase: string) => {
+      if (!state.wallet) throw new Error("Wallet not unlocked");
+
+      const recoveryKeyB64 = recoveryPhraseToKeyB64(recoveryPhrase);
+
+      // Embed recovery key in wallet data
+      const updated: DecryptedWallet = {
+        ...state.wallet,
+        _recoveryKeyB64: recoveryKeyB64,
+      };
+
+      // persistWallet will auto-generate the recovery vault now
+      await persistWallet(updated);
+    },
+    [state.wallet, persistWallet]
+  );
+
   // Update config
   const updateConfig = useCallback(
     async (updates: Partial<WalletConfig>) => {
@@ -487,6 +526,7 @@ export function useWallet() {
     addVault,
     updateVault,
     changePassword,
+    setupRecovery,
     recordAccess,
     updateConfig,
     persistWallet,
