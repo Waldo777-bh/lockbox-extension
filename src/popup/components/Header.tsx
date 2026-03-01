@@ -1,64 +1,75 @@
 import React from "react";
-import { Lock, LogOut, Crown } from "lucide-react";
-import type { User, Vault } from "../../types";
+import { Lock, Settings } from "lucide-react";
+import { TierBadge } from "./TierBadge";
+import { SyncIndicator } from "./SyncIndicator";
 
 interface HeaderProps {
-  user: User | null;
-  vaults: Vault[];
-  onSignOut: () => void;
+  onLock: () => void;
+  onSettings: () => void;
+  tier: "free" | "pro";
+  syncStatus: "synced" | "syncing" | "offline";
 }
 
-export function Header({ user, vaults, onSignOut }: HeaderProps) {
-  const isPro = user?.tier === "pro";
-
+export function Header({ onLock, onSettings, tier, syncStatus }: HeaderProps) {
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-lockbox-border">
-      <div className="flex items-center gap-2">
+      {/* Left: Logo + sync + tier */}
+      <div className="flex items-center gap-2.5">
+        {/* Lockbox logo */}
         <div className="w-7 h-7 rounded-lg bg-lockbox-accent/10 border border-lockbox-accent/20 flex items-center justify-center">
-          <Lock className="w-3.5 h-3.5 text-lockbox-accent" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="text-lockbox-accent"
+          >
+            <rect
+              x="3"
+              y="11"
+              width="18"
+              height="11"
+              rx="2"
+              stroke="currentColor"
+              strokeWidth="2"
+            />
+            <path
+              d="M7 11V7a5 5 0 0 1 10 0v4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <circle cx="12" cy="16.5" r="1.5" fill="currentColor" />
+          </svg>
         </div>
-        <div>
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-sm font-semibold text-lockbox-text leading-tight">
-              Lockbox
-            </h1>
-            {isPro && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-lockbox-accent/15 text-lockbox-accent text-[9px] font-bold leading-none">
-                <Crown className="w-2.5 h-2.5" />
-                PRO
-              </span>
-            )}
-          </div>
-          <p className="text-[10px] text-lockbox-text-muted leading-tight">
-            {vaults.length} vault{vaults.length !== 1 ? "s" : ""}
-          </p>
+
+        <div className="flex items-center gap-2">
+          <h1 className="text-sm font-semibold text-lockbox-text leading-tight">
+            Lockbox
+          </h1>
+          <TierBadge tier={tier} />
+          <SyncIndicator status={syncStatus} />
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {user && (
-          <div className="flex items-center gap-2">
-            {user.imageUrl ? (
-              <img
-                src={user.imageUrl}
-                alt={user.name ?? "User"}
-                className="w-6 h-6 rounded-full border border-lockbox-border"
-              />
-            ) : (
-              <div className="w-6 h-6 rounded-full bg-lockbox-accent/20 flex items-center justify-center">
-                <span className="text-[10px] font-medium text-lockbox-accent">
-                  {(user.name ?? user.email)?.[0]?.toUpperCase() ?? "U"}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+      {/* Right: Lock + Settings */}
+      <div className="flex items-center gap-1">
         <button
-          onClick={onSignOut}
-          className="p-1.5 rounded-md hover:bg-lockbox-surface text-lockbox-text-muted hover:text-lockbox-text transition-colors"
-          title="Sign out"
+          onClick={onLock}
+          className="p-1.5 rounded-md text-lockbox-text-muted hover:text-lockbox-text hover:bg-lockbox-surface transition-colors"
+          title="Lock wallet"
+          aria-label="Lock wallet"
         >
-          <LogOut className="w-3.5 h-3.5" />
+          <Lock className="w-4 h-4" />
+        </button>
+        <button
+          onClick={onSettings}
+          className="p-1.5 rounded-md text-lockbox-text-muted hover:text-lockbox-text hover:bg-lockbox-surface transition-colors"
+          title="Settings"
+          aria-label="Settings"
+        >
+          <Settings className="w-4 h-4" />
         </button>
       </div>
     </div>
