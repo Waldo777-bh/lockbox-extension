@@ -24,7 +24,7 @@ The Lockbox Chrome Extension brings your [Lockbox](https://yourlockbox.dev) vaul
 ### Install
 
 ```bash
-git clone https://github.com/Waldo777-bh/lockbox-extension.git
+git clone https://github.com/lockboxdev/lockbox-extension.git
 cd lockbox-extension
 npm install
 ```
@@ -98,7 +98,7 @@ The extension connects to `https://dashboard.yourlockbox.dev/api`:
 
 - [Lockbox Dashboard](https://dashboard.yourlockbox.dev) — Web dashboard
 - [Lockbox npm package](https://www.npmjs.com/package/lockbox) — Node.js SDK
-- [Lockbox GitHub](https://github.com/Waldo777-bh/lockbox) — Main repository
+- [Lockbox GitHub](https://github.com/lockboxdev/lockbox) — Main repository
 
 ## License
 

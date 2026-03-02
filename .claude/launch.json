@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "extension-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "require('http').createServer((q,s)=>{const fs=require('fs'),p=require('path'),u=q.url==='/'?'/popup.html':q.url,f=p.join(__dirname,'dist',u),ext=p.extname(f),types={'.html':'text/html','.js':'application/javascript','.css':'text/css','.json':'application/json','.png':'image/png','.svg':'image/svg+xml'};fs.readFile(f,(e,d)=>{if(e){s.writeHead(404);s.end('Not found')}else{s.writeHead(200,{'Content-Type':types[ext]||'application/octet-stream'});s.end(d)}})}).listen(3002,()=>console.log('Preview on http://localhost:3002'))"],
+      "port": 3002,
+      "cwd": "C:\\Users\\dev\\lockbox-extension"
+    }
+  ]
+}
