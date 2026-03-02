@@ -42,7 +42,14 @@ function HomeHeader({ onLock, onSettings }: { onLock: () => void; onSettings: ()
               Lockbox
             </h1>
             {isPro && (
-              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-lockbox-accent/15 text-lockbox-accent text-[9px] font-bold leading-none">
+              <span
+                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none uppercase tracking-wider"
+                style={{
+                  background: "linear-gradient(135deg, rgba(255,215,0,0.18), rgba(255,165,0,0.18))",
+                  color: "#FFD700",
+                  border: "1px solid rgba(255,215,0,0.25)",
+                }}
+              >
                 <Crown className="w-2.5 h-2.5" />
                 PRO
               </span>
@@ -261,7 +268,7 @@ function KeyItem({
   );
 }
 
-// ── Upgrade banner ──
+// ── Upgrade banner / Pro status ──
 function UpgradeBanner({ onUpgrade }: { onUpgrade: () => void }) {
   return (
     <button
@@ -273,6 +280,36 @@ function UpgradeBanner({ onUpgrade }: { onUpgrade: () => void }) {
         <p className="text-xs font-medium text-lockbox-pro">Upgrade to Pro</p>
         <p className="text-[10px] text-lockbox-text-muted">Unlimited vaults, keys & more</p>
       </div>
+    </button>
+  );
+}
+
+function ProStatusBanner({ onManage }: { onManage: () => void }) {
+  return (
+    <button
+      onClick={onManage}
+      className="mx-3 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all"
+      style={{
+        background: "linear-gradient(135deg, rgba(255,215,0,0.06), rgba(255,165,0,0.04))",
+        border: "1px solid rgba(255,215,0,0.15)",
+      }}
+    >
+      <div
+        className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+        style={{
+          background: "linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.15))",
+          border: "1px solid rgba(255,215,0,0.2)",
+        }}
+      >
+        <Crown className="w-3 h-3" style={{ color: "#FFD700" }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-semibold" style={{ color: "#FFD700" }}>
+          Pro Plan Active
+        </p>
+        <p className="text-[10px] text-lockbox-text-muted">Unlimited vaults & keys</p>
+      </div>
+      <span className="text-[10px] text-lockbox-text-muted">Manage →</span>
     </button>
   );
 }
@@ -535,9 +572,13 @@ export function WalletHome() {
         <EmptyState onAdd={() => navigate("add-key")} />
       )}
 
-      {/* Upgrade banner for free tier */}
-      {config.tier === "free" && hasKeys && (
-        <UpgradeBanner onUpgrade={() => navigate("upgrade")} />
+      {/* Tier banner */}
+      {hasKeys && (
+        config.tier === "pro" ? (
+          <ProStatusBanner onManage={() => navigate("upgrade")} />
+        ) : (
+          <UpgradeBanner onUpgrade={() => navigate("upgrade")} />
+        )
       )}
 
       {/* Quick stats footer */}

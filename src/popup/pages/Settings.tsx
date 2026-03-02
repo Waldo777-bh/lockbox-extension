@@ -941,30 +941,80 @@ export function Settings() {
           </SettingRow>
         </SettingsSection>
 
-        {/* Account */}
-        <SettingsSection
-          title="Account"
-          icon={<User className="w-3.5 h-3.5 text-lockbox-accent" />}
-        >
-          <SettingRow label="Email">
-            <span className="text-xs text-lockbox-text-muted">
-              {accountInfo?.email ?? "Not set"}
-            </span>
-          </SettingRow>
-          <SettingRow label="Tier">
-            <span className={`flex items-center gap-1 text-xs font-medium ${
-              config.tier === "pro" ? "text-lockbox-pro" : "text-lockbox-text-muted"
-            }`}>
-              {config.tier === "pro" && <Crown className="w-3 h-3" />}
-              {config.tier === "pro" ? "Pro" : "Free"}
-            </span>
-          </SettingRow>
-          <SettingRow label="Wallet ID">
-            <span className="text-[10px] font-mono text-lockbox-text-muted truncate max-w-[140px] block">
-              {accountInfo?.walletId ?? "Unknown"}
-            </span>
-          </SettingRow>
-        </SettingsSection>
+        {/* Plan & Account */}
+        {config.tier === "pro" ? (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <Crown className="w-3.5 h-3.5" style={{ color: "#FFD700" }} />
+              <h2 className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFD700" }}>
+                Pro Plan
+              </h2>
+            </div>
+            <div
+              className="rounded-lg px-3.5 py-3"
+              style={{
+                background: "linear-gradient(135deg, rgba(255,215,0,0.06), rgba(255,165,0,0.04))",
+                border: "1px solid rgba(255,215,0,0.15)",
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,165,0,0.15))",
+                    border: "1px solid rgba(255,215,0,0.2)",
+                  }}
+                >
+                  <Crown className="w-4 h-4" style={{ color: "#FFD700" }} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold" style={{ color: "#FFD700" }}>
+                    Pro Plan Active
+                  </p>
+                  <p className="text-[10px] text-lockbox-text-muted">
+                    Unlimited vaults & API keys
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-2 pt-2" style={{ borderTop: "1px solid rgba(255,215,0,0.1)" }}>
+                <div className="flex-1">
+                  <p className="text-[10px] text-lockbox-text-muted">Email</p>
+                  <p className="text-xs text-lockbox-text truncate">{accountInfo?.email ?? "Not set"}</p>
+                </div>
+                <div className="flex-1">
+                  <p className="text-[10px] text-lockbox-text-muted">Wallet ID</p>
+                  <p className="text-[10px] font-mono text-lockbox-text-secondary truncate">
+                    {accountInfo?.walletId ?? "Unknown"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <SettingsSection
+            title="Account"
+            icon={<User className="w-3.5 h-3.5 text-lockbox-accent" />}
+          >
+            <SettingRow label="Email">
+              <span className="text-xs text-lockbox-text-muted">
+                {accountInfo?.email ?? "Not set"}
+              </span>
+            </SettingRow>
+            <SettingRow label="Tier">
+              <button
+                onClick={() => navigate("upgrade")}
+                className="flex items-center gap-1 text-xs font-medium text-lockbox-accent hover:underline"
+              >
+                Free — Upgrade →
+              </button>
+            </SettingRow>
+            <SettingRow label="Wallet ID">
+              <span className="text-[10px] font-mono text-lockbox-text-muted truncate max-w-[140px] block">
+                {accountInfo?.walletId ?? "Unknown"}
+              </span>
+            </SettingRow>
+          </SettingsSection>
+        )}
 
         {/* Dashboard Connection */}
         <DashboardConnection />
