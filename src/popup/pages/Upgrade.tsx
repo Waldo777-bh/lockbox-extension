@@ -170,14 +170,25 @@ export function Upgrade() {
         >
           {isPro ? (
             <div className="text-center py-3">
-              <p className="text-xs text-lockbox-text-muted">
-                Manage your subscription on the dashboard
-              </p>
-              <button
-                onClick={() => chrome.tabs.create({ url: `${DASHBOARD_URL}/account` })}
-                className="mt-2 text-xs text-lockbox-accent hover:underline flex items-center gap-1 mx-auto"
+              <div
+                className="rounded-xl px-4 py-3 mb-3 mx-auto max-w-[260px]"
+                style={{
+                  background: "linear-gradient(135deg, rgba(255,215,0,0.08), rgba(255,165,0,0.05))",
+                  border: "1px solid rgba(255,215,0,0.15)",
+                }}
               >
-                Open Dashboard
+                <p className="text-[11px] font-semibold mb-0.5" style={{ color: "#FFD700" }}>
+                  You&apos;re all set!
+                </p>
+                <p className="text-[10px] text-lockbox-text-muted">
+                  Unlimited vaults, keys & cross-device sync
+                </p>
+              </div>
+              <button
+                onClick={() => chrome.tabs.create({ url: `${DASHBOARD_URL}/dashboard/settings` })}
+                className="text-xs text-lockbox-accent hover:underline flex items-center gap-1 mx-auto"
+              >
+                Manage Subscription
                 <ExternalLink className="w-3 h-3" />
               </button>
             </div>
