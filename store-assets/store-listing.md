@@ -40,4 +40,4 @@ English
 https://yourlockbox.dev
 
 ## Support URL
-https://github.com/Waldo777-bh/lockbox-extension/issues
+https://github.com/lockboxdev/lockbox-extension/issues

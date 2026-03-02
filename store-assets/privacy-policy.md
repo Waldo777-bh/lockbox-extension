@@ -65,5 +65,5 @@ We may update this privacy policy from time to time. Changes will be posted at t
 ## Contact
 
 For questions about this privacy policy, please contact us at:
-- GitHub: https://github.com/Waldo777-bh/lockbox-extension/issues
+- GitHub: https://github.com/lockboxdev/lockbox-extension/issues
 - Website: https://yourlockbox.dev
