@@ -17,6 +17,7 @@ import {
   X,
   Save,
   Loader2,
+  FolderInput,
 } from "lucide-react";
 import { useWalletContext } from "../App";
 import { getServiceName, getServiceColor } from "@/services/serviceRegistry";
@@ -144,6 +145,7 @@ export function KeyDetail() {
     config,
     deleteKey,
     updateKey,
+    moveKey,
     recordAccess,
     error,
     setError,
@@ -153,11 +155,15 @@ export function KeyDetail() {
   const [copied, setCopied] = useState(false);
   const [refCopied, setRefCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [editing, setEditing] = useState(false);
 
   // Edit fields
   const [editName, setEditName] = useState(selectedKey?.name ?? "");
+  const [editService, setEditService] = useState(selectedKey?.service ?? "");
+  const [editValue, setEditValue] = useState(selectedKey?.value ?? "");
   const [editNotes, setEditNotes] = useState(selectedKey?.notes ?? "");
   const [editFavourite, setEditFavourite] = useState(selectedKey?.favourite ?? false);
   const [saving, setSaving] = useState(false);
@@ -219,23 +225,40 @@ export function KeyDetail() {
   const handleSaveEdits = async () => {
     setSaving(true);
     try {
-      await updateKey(selectedKey.id, {
+      const updates: Record<string, any> = {
         name: editName.trim(),
         notes: editNotes.trim(),
         favourite: editFavourite,
-      });
-      // Update selected key in context
+      };
+      if (editService.trim() !== selectedKey.service) {
+        updates.service = editService.trim();
+      }
+      if (editValue !== selectedKey.value) {
+        updates.value = editValue;
+      }
+      await updateKey(selectedKey.id, updates);
       setSelectedKey({
         ...selectedKey,
-        name: editName.trim(),
-        notes: editNotes.trim(),
-        favourite: editFavourite,
+        ...updates,
       });
       setEditing(false);
     } catch (err: any) {
       setError(err.message || "Failed to update key");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleMoveToVault = async (targetVaultId: string) => {
+    setMoving(true);
+    try {
+      await moveKey(selectedKey.id, targetVaultId);
+      setSelectedKey({ ...selectedKey, vaultId: targetVaultId });
+      setShowMoveDialog(false);
+    } catch (err: any) {
+      setError(err.message || "Failed to move key");
+    } finally {
+      setMoving(false);
     }
   };
 
@@ -264,13 +287,24 @@ export function KeyDetail() {
         </div>
         <div className="flex items-center gap-1">
           {!editing && (
-            <button
-              onClick={() => setEditing(true)}
-              className="p-1.5 rounded-md hover:bg-lockbox-surface text-lockbox-text-muted hover:text-lockbox-accent transition-colors"
-              title="Edit"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
+            <>
+              <button
+                onClick={() => setEditing(true)}
+                className="p-1.5 rounded-md hover:bg-lockbox-surface text-lockbox-text-muted hover:text-lockbox-accent transition-colors"
+                title="Edit"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              {wallet && wallet.vaults.length > 1 && (
+                <button
+                  onClick={() => setShowMoveDialog(true)}
+                  className="p-1.5 rounded-md hover:bg-lockbox-surface text-lockbox-text-muted hover:text-lockbox-accent transition-colors"
+                  title="Move to vault"
+                >
+                  <FolderInput className="w-4 h-4" />
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={() => setShowDeleteConfirm(true)}
@@ -292,21 +326,37 @@ export function KeyDetail() {
             {serviceName[0]?.toUpperCase() ?? "?"}
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-base font-semibold text-lockbox-text">{serviceName}</p>
-              {selectedKey.favourite && (
-                <Star className="w-4 h-4 text-lockbox-warning fill-lockbox-warning" />
-              )}
-            </div>
             {editing ? (
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="mt-1 w-full bg-lockbox-surface border border-lockbox-border rounded-md px-2.5 py-1.5 text-xs text-lockbox-text focus:border-lockbox-accent transition-colors"
-              />
+              <div className="space-y-1.5">
+                <div>
+                  <label className="text-[10px] font-medium text-lockbox-text-muted uppercase tracking-wider">Service</label>
+                  <input
+                    type="text"
+                    value={editService}
+                    onChange={(e) => setEditService(e.target.value)}
+                    className="mt-0.5 w-full bg-lockbox-surface border border-lockbox-border rounded-md px-2.5 py-1.5 text-xs text-lockbox-text focus:border-lockbox-accent transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-lockbox-text-muted uppercase tracking-wider">Key Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="mt-0.5 w-full bg-lockbox-surface border border-lockbox-border rounded-md px-2.5 py-1.5 text-xs text-lockbox-text focus:border-lockbox-accent transition-colors"
+                  />
+                </div>
+              </div>
             ) : (
-              <p className="text-sm text-lockbox-text-secondary">{selectedKey.name}</p>
+              <>
+                <div className="flex items-center gap-2">
+                  <p className="text-base font-semibold text-lockbox-text">{serviceName}</p>
+                  {selectedKey.favourite && (
+                    <Star className="w-4 h-4 text-lockbox-warning fill-lockbox-warning" />
+                  )}
+                </div>
+                <p className="text-sm text-lockbox-text-secondary">{selectedKey.name}</p>
+              </>
             )}
           </div>
         </div>
@@ -336,13 +386,27 @@ export function KeyDetail() {
         )}
 
         {/* Key value */}
-        <KeyValueReveal
-          value={selectedKey.value}
-          revealed={revealed}
-          onToggle={() => setRevealed(!revealed)}
-          onCopy={handleCopyValue}
-          copied={copied}
-        />
+        {editing ? (
+          <div className="bg-lockbox-surface border border-lockbox-border rounded-lg p-3">
+            <label className="text-[10px] font-medium text-lockbox-text-muted uppercase tracking-wider mb-1.5 block">
+              Key Value
+            </label>
+            <textarea
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              rows={3}
+              className="w-full bg-lockbox-bg border border-lockbox-border rounded-md px-2.5 py-1.5 font-mono text-xs text-lockbox-text focus:border-lockbox-accent transition-colors resize-none"
+            />
+          </div>
+        ) : (
+          <KeyValueReveal
+            value={selectedKey.value}
+            revealed={revealed}
+            onToggle={() => setRevealed(!revealed)}
+            onCopy={handleCopyValue}
+            copied={copied}
+          />
+        )}
 
         {/* Lockbox reference */}
         <div className="bg-lockbox-surface border border-lockbox-border rounded-lg p-3">
@@ -429,6 +493,8 @@ export function KeyDetail() {
               onClick={() => {
                 setEditing(false);
                 setEditName(selectedKey.name);
+                setEditService(selectedKey.service);
+                setEditValue(selectedKey.value);
                 setEditNotes(selectedKey.notes);
                 setEditFavourite(selectedKey.favourite);
               }}
@@ -466,6 +532,61 @@ export function KeyDetail() {
           </motion.div>
         )}
       </div>
+
+      {/* Move to vault dialog */}
+      <AnimatePresence>
+        {showMoveDialog && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center px-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-black/60" onClick={() => setShowMoveDialog(false)} />
+            <motion.div
+              className="relative bg-lockbox-surface border border-lockbox-border rounded-xl p-5 w-full max-w-sm shadow-xl"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <FolderInput className="w-5 h-5 text-lockbox-accent" />
+                <h3 className="text-sm font-semibold text-lockbox-text">Move to Vault</h3>
+              </div>
+              <p className="text-xs text-lockbox-text-secondary mb-4">
+                Select the vault to move &ldquo;{selectedKey.name}&rdquo; to:
+              </p>
+              <div className="space-y-2">
+                {wallet?.vaults
+                  .filter((v) => v.id !== selectedKey.vaultId)
+                  .map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => handleMoveToVault(v.id)}
+                      disabled={moving}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-lockbox-border bg-lockbox-bg hover:border-lockbox-accent/50 transition-colors text-left disabled:opacity-50"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-lockbox-accent/10 flex items-center justify-center text-xs font-bold text-lockbox-accent">
+                        {v.name[0]?.toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-lockbox-text truncate">{v.name}</p>
+                        <p className="text-[10px] text-lockbox-text-muted">{v.keys.length} keys</p>
+                      </div>
+                      {moving && <Loader2 className="w-3.5 h-3.5 animate-spin text-lockbox-accent" />}
+                    </button>
+                  ))}
+              </div>
+              <button
+                onClick={() => setShowMoveDialog(false)}
+                className="mt-4 w-full py-2 rounded-lg border border-lockbox-border text-xs font-medium text-lockbox-text-secondary hover:bg-lockbox-border transition-colors"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Delete confirmation */}
       <AnimatePresence>

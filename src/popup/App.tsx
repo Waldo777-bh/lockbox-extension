@@ -101,7 +101,7 @@ export default function App() {
     }
   }, [wallet.config?.theme]);
 
-  const sizeClass = isSidePanel ? "w-full h-full" : "w-[420px] h-[640px]";
+  const sizeClass = isSidePanel ? "w-full h-full" : "w-[420px] h-[720px]";
 
   if (wallet.loading) {
     return (
