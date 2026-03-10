@@ -72,7 +72,7 @@ export function useWallet() {
 
         // Trigger background sync whenever the popup opens with an unlocked wallet
         if (walletData) {
-          syncPush(walletData).catch(() => {});
+          syncPush(walletData).catch((err) => console.warn("[Lockbox] sync push failed:", err));
         }
       } catch (err) {
         setState((s) => ({ ...s, loading: false, error: "Failed to initialize wallet" }));
@@ -134,7 +134,7 @@ export function useWallet() {
       }));
 
       // Sync the new wallet to dashboard immediately (replaces any stale data)
-      syncPush(walletWithRecoveryKey).catch(() => {});
+      syncPush(walletWithRecoveryKey).catch((err) => console.warn("[Lockbox] sync push failed:", err));
     } catch (err: any) {
       setState((s) => ({ ...s, loading: false, error: err.message || "Failed to create wallet" }));
     }
@@ -165,7 +165,7 @@ export function useWallet() {
       chrome.runtime?.sendMessage({ type: "LOCKBOX_ACTIVITY" }).catch(() => {});
 
       // Sync wallet to dashboard on unlock
-      syncPush(wallet).catch(() => {});
+      syncPush(wallet).catch((err) => console.warn("[Lockbox] sync push failed:", err));
     } catch (err: any) {
       setState((s) => ({
         ...s,
@@ -208,7 +208,7 @@ export function useWallet() {
     setState((s) => ({ ...s, wallet }));
 
     // Trigger sync in the background (don't await — fire and forget)
-    syncPush(wallet).catch(() => {});
+    syncPush(wallet).catch((err) => console.warn("[Lockbox] sync push failed:", err));
   }, []);
 
   // Add key
@@ -471,6 +471,59 @@ export function useWallet() {
     [state.wallet, persistWallet]
   );
 
+  // Move key to different vault
+  const moveKey = useCallback(
+    async (keyId: string, targetVaultId: string) => {
+      if (!state.wallet) return;
+      const now = new Date().toISOString();
+
+      // Find the key and its current vault
+      let foundKey: ApiKey | undefined;
+      let sourceVault: Vault | undefined;
+      for (const v of state.wallet.vaults) {
+        const k = v.keys.find((k) => k.id === keyId);
+        if (k) {
+          foundKey = k;
+          sourceVault = v;
+          break;
+        }
+      }
+      if (!foundKey || !sourceVault) return;
+      if (sourceVault.id === targetVaultId) return; // already in target
+
+      const movedKey: ApiKey = { ...foundKey, vaultId: targetVaultId, updatedAt: now };
+
+      const updated: DecryptedWallet = {
+        ...state.wallet,
+        vaults: state.wallet.vaults.map((v) => {
+          if (v.id === sourceVault!.id) {
+            return { ...v, keys: v.keys.filter((k) => k.id !== keyId), updatedAt: now };
+          }
+          if (v.id === targetVaultId) {
+            return { ...v, keys: [...v.keys, movedKey], updatedAt: now };
+          }
+          return v;
+        }),
+        auditLog: [
+          {
+            id: generateId(),
+            action: "updated" as const,
+            keyId,
+            keyName: foundKey.name,
+            service: foundKey.service,
+            vaultId: targetVaultId,
+            vaultName: state.wallet.vaults.find((v) => v.id === targetVaultId)?.name || "",
+            timestamp: now,
+          },
+          ...state.wallet.auditLog,
+        ].slice(0, 500),
+      };
+
+      await persistWallet(updated);
+    },
+    [state.wallet, persistWallet]
+  );
+
   // Record key access
   const recordAccess = useCallback(
     async (keyId: string, action: AuditEntry["action"], site?: string) => {
@@ -548,7 +601,7 @@ export function useWallet() {
       setState((s) => ({ ...s, wallet: decryptedWallet }));
 
       // Sync re-encrypted vault to dashboard
-      syncPush(decryptedWallet).catch(() => {});
+      syncPush(decryptedWallet).catch((err) => console.warn("[Lockbox] sync push failed:", err));
     },
     []
   );
@@ -597,6 +650,7 @@ export function useWallet() {
     deleteVault,
     addVault,
     updateVault,
+    moveKey,
     changePassword,
     setupRecovery,
     recordAccess,
