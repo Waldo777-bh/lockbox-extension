@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock,
@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Vault,
   Box,
+  Filter,
 } from "lucide-react";
 import { useWalletContext } from "../App";
 import { getServiceName, getServiceColor } from "@/services/serviceRegistry";
@@ -104,20 +105,116 @@ function AccountSummary() {
   );
 }
 
-// ── Inline search bar ──
-function InlineSearchBar({ query, onChange }: { query: string; onChange: (q: string) => void }) {
+// ── Search bar with vault filter & add button ──
+function SearchToolbar({
+  query,
+  onChange,
+  vaultFilter,
+  onVaultFilterChange,
+  vaultNames,
+  onAdd,
+}: {
+  query: string;
+  onChange: (q: string) => void;
+  vaultFilter: string;
+  onVaultFilterChange: (v: string) => void;
+  vaultNames: string[];
+  onAdd: () => void;
+}) {
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { navigate } = useWalletContext();
+
+  useEffect(() => {
+    if (!addMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setAddMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [addMenuOpen]);
+
+  const menuItems = [
+    { label: "Manual Entry", icon: <PenLine className="w-3.5 h-3.5" />, action: () => navigate("add-key") },
+    { label: "Quick Paste", icon: <ClipboardPaste className="w-3.5 h-3.5" />, action: () => navigate("quick-paste") },
+    { label: "Import .env", icon: <FileText className="w-3.5 h-3.5" />, action: () => navigate("import-env") },
+    { label: "Manage Vaults", icon: <Box className="w-3.5 h-3.5" />, action: () => navigate("vault-list") },
+  ];
+
   return (
-    <div className="px-3 pt-2 pb-1">
-      <div className="relative">
-        <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-lockbox-text-muted pointer-events-none" />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Search keys..."
-          className="w-full pl-8 pr-3 py-2 bg-lockbox-surface border border-lockbox-border rounded-lg text-sm text-lockbox-text placeholder:text-lockbox-text-muted focus:outline-none focus:border-lockbox-accent/50 transition-all"
-        />
+    <div className="px-3 pt-2 pb-1 flex flex-col gap-1.5">
+      {/* Search row with + button */}
+      <div className="flex items-center gap-1.5">
+        <div className="relative flex-1">
+          <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-lockbox-text-muted pointer-events-none" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search keys..."
+            className="w-full pl-8 pr-3 py-2 bg-lockbox-surface border border-lockbox-border rounded-lg text-sm text-lockbox-text placeholder:text-lockbox-text-muted focus:outline-none focus:border-lockbox-accent/50 transition-all"
+          />
+        </div>
+        {/* Add button */}
+        <div className="relative" ref={menuRef}>
+          <motion.button
+            onClick={() => setAddMenuOpen(!addMenuOpen)}
+            className="w-9 h-9 rounded-lg bg-lockbox-accent text-lockbox-bg flex items-center justify-center shadow-md shadow-lockbox-accent/20 hover:shadow-lockbox-accent/40 transition-shadow flex-shrink-0"
+            whileTap={{ scale: 0.92 }}
+            animate={{ rotate: addMenuOpen ? 45 : 0 }}
+            transition={{ duration: 0.2 }}
+            title="Add key"
+          >
+            <Plus className="w-4.5 h-4.5" />
+          </motion.button>
+          <AnimatePresence>
+            {addMenuOpen && (
+              <motion.div
+                className="absolute top-full right-0 mt-1.5 z-50 flex flex-col gap-1 w-40"
+                initial={{ opacity: 0, y: -4, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+              >
+                {menuItems.map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      setAddMenuOpen(false);
+                      item.action();
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 bg-lockbox-surface border border-lockbox-border rounded-lg text-xs font-medium text-lockbox-text hover:bg-lockbox-border transition-colors shadow-lg"
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
+
+      {/* Vault filter row */}
+      {vaultNames.length > 1 && (
+        <div className="flex items-center gap-1.5">
+          <Filter className="w-3 h-3 text-lockbox-text-muted flex-shrink-0" />
+          <select
+            value={vaultFilter}
+            onChange={(e) => onVaultFilterChange(e.target.value)}
+            className="flex-1 bg-lockbox-surface border border-lockbox-border rounded-md text-xs text-lockbox-text py-1 px-2 focus:outline-none focus:border-lockbox-accent/50 transition-all appearance-none cursor-pointer"
+          >
+            <option value="">All Vaults</option>
+            {vaultNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -156,11 +253,13 @@ function ServiceGroup({
   keys,
   onKeyClick,
   onCopyKey,
+  showVault,
 }: {
   service: string;
-  keys: ApiKey[];
+  keys: (ApiKey & { vaultName?: string })[];
   onKeyClick: (key: ApiKey) => void;
   onCopyKey: (key: ApiKey) => void;
+  showVault?: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const color = getServiceColor(service);
@@ -189,6 +288,7 @@ function ServiceGroup({
               apiKey={key}
               onClick={() => onKeyClick(key)}
               onCopy={() => onCopyKey(key)}
+              showVault={showVault}
             />
           ))}
         </div>
@@ -202,10 +302,12 @@ function KeyItem({
   apiKey,
   onClick,
   onCopy,
+  showVault,
 }: {
-  apiKey: ApiKey;
+  apiKey: ApiKey & { vaultName?: string };
   onClick: () => void;
   onCopy: () => void;
+  showVault?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const color = getServiceColor(apiKey.service);
@@ -247,8 +349,13 @@ function KeyItem({
             <Star className="w-3 h-3 text-lockbox-warning fill-lockbox-warning flex-shrink-0" />
           )}
         </div>
-        <div className="text-xs text-lockbox-text-muted truncate font-mono">
-          {masked}
+        <div className="flex items-center gap-1.5 text-xs text-lockbox-text-muted truncate">
+          <span className="font-mono truncate">{masked}</span>
+          {showVault && apiKey.vaultName && (
+            <span className="flex-shrink-0 px-1.5 py-0.5 rounded bg-lockbox-surface border border-lockbox-border text-[10px] font-medium">
+              {apiKey.vaultName}
+            </span>
+          )}
         </div>
       </div>
 
@@ -437,7 +544,7 @@ export function WalletHome() {
 
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
-  const [fabOpen, setFabOpen] = useState(false);
+  const [vaultFilter, setVaultFilter] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
 
@@ -449,9 +556,20 @@ export function WalletHome() {
     );
   }, [wallet]);
 
+  // Vault names for the filter dropdown
+  const vaultNames = useMemo(() => {
+    if (!wallet) return [];
+    return wallet.vaults.map((v) => v.name);
+  }, [wallet]);
+
   // Apply filter
   const filteredKeys = useMemo(() => {
     let keys = allKeys;
+
+    // Apply vault filter
+    if (vaultFilter) {
+      keys = keys.filter((k) => k.vaultName === vaultFilter);
+    }
 
     if (activeFilter === "favourites") {
       keys = keys.filter((k) => k.favourite);
@@ -472,12 +590,13 @@ export function WalletHome() {
         (k) =>
           k.name.toLowerCase().includes(lower) ||
           k.service.toLowerCase().includes(lower) ||
-          getServiceName(k.service).toLowerCase().includes(lower)
+          getServiceName(k.service).toLowerCase().includes(lower) ||
+          (k.vaultName && k.vaultName.toLowerCase().includes(lower))
       );
     }
 
     return keys;
-  }, [allKeys, activeFilter, query]);
+  }, [allKeys, activeFilter, query, vaultFilter]);
 
   // Group keys by service
   const groupedByService = useMemo(() => {
@@ -538,10 +657,17 @@ export function WalletHome() {
       {/* Account summary */}
       <AccountSummary />
 
-      {/* Search + Filters */}
+      {/* Search + Vault Filter + Add button + Filters */}
       {hasKeys && (
         <>
-          <InlineSearchBar query={query} onChange={setQuery} />
+          <SearchToolbar
+            query={query}
+            onChange={setQuery}
+            vaultFilter={vaultFilter}
+            onVaultFilterChange={setVaultFilter}
+            vaultNames={vaultNames}
+            onAdd={() => navigate("add-key")}
+          />
           <FilterTabs active={activeFilter} onChange={setActiveFilter} />
         </>
       )}
@@ -557,6 +683,7 @@ export function WalletHome() {
                 keys={keys}
                 onKeyClick={handleKeyClick}
                 onCopyKey={handleCopyKey}
+                showVault={vaultNames.length > 1}
               />
             ))
           ) : (
@@ -583,16 +710,6 @@ export function WalletHome() {
 
       {/* Quick stats footer */}
       <StatsFooter />
-
-      {/* FAB */}
-      <FABMenu
-        open={fabOpen}
-        onToggle={() => setFabOpen(!fabOpen)}
-        onManual={() => navigate("add-key")}
-        onQuickPaste={() => navigate("quick-paste")}
-        onImportEnv={() => navigate("import-env")}
-        onManageVaults={() => navigate("vault-list")}
-      />
 
       {/* Toast notification */}
       {toastVisible && (
