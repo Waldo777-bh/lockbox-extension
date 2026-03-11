@@ -1,5 +1,15 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { Upload, Loader2 } from "lucide-react";
 import { useWalletContext } from "../App";
+import {
+  setEncryptedVault,
+  setRecoveryVault,
+  setStatus,
+  setConfig,
+  setAccount,
+  getConfig,
+} from "@/lib/storage";
 
 function LockboxLogo() {
   return (
@@ -67,6 +77,65 @@ function LockboxLogo() {
 
 export function Welcome() {
   const { navigate } = useWalletContext();
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  const handleRestoreFromBackup = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".lockbox,.json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setRestoring(true);
+      setRestoreError(null);
+
+      try {
+        const text = await file.text();
+        const backup = JSON.parse(text);
+
+        if (backup.format !== "lockbox-backup" || !backup.vault) {
+          throw new Error("Invalid backup file");
+        }
+
+        if (!backup.vault.ciphertext || !backup.vault.salt || !backup.vault.iv) {
+          throw new Error("Backup file is corrupted");
+        }
+
+        await setEncryptedVault(backup.vault);
+
+        if (backup.recoveryVault) {
+          await setRecoveryVault(backup.recoveryVault);
+        }
+
+        await setStatus("locked");
+
+        if (backup.tier || backup.licenseKey) {
+          const currentConfig = await getConfig();
+          await setConfig({
+            ...currentConfig,
+            tier: backup.tier ?? currentConfig.tier,
+            licenseKey: backup.licenseKey ?? currentConfig.licenseKey,
+          });
+        }
+
+        await setAccount({
+          email: null,
+          name: backup.walletName ?? "Imported Wallet",
+          walletId: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+        });
+
+        // Reload to lock screen
+        window.location.reload();
+      } catch (err: any) {
+        setRestoreError(err.message || "Failed to restore wallet");
+        setRestoring(false);
+      }
+    };
+    input.click();
+  };
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 py-10">
@@ -112,6 +181,33 @@ export function Welcome() {
         >
           Import Existing Wallet
         </button>
+
+        <button
+          onClick={handleRestoreFromBackup}
+          disabled={restoring}
+          className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2
+                     border border-lockbox-border text-lockbox-text-secondary
+                     hover:border-lockbox-accent/30 hover:text-lockbox-accent
+                     transition-all duration-200 cursor-pointer active:scale-[0.98]
+                     bg-transparent disabled:opacity-50"
+        >
+          {restoring ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Upload size={16} />
+          )}
+          {restoring ? "Restoring..." : "Restore from Backup"}
+        </button>
+
+        {restoreError && (
+          <motion.p
+            className="text-xs text-lockbox-danger text-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            {restoreError}
+          </motion.p>
+        )}
       </motion.div>
 
       <motion.p
