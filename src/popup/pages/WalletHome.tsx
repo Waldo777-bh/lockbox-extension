@@ -686,7 +686,7 @@ export function WalletHome() {
                 onKeyClick={handleKeyClick}
                 onCopyKey={handleCopyKey}
                 showVault={vaultNames.length > 1}
-                defaultCollapsed={!!vaultFilter}
+                defaultCollapsed
               />
             ))
           ) : (
