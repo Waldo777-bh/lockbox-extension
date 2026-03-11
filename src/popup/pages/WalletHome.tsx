@@ -254,14 +254,16 @@ function ServiceGroup({
   onKeyClick,
   onCopyKey,
   showVault,
+  defaultCollapsed,
 }: {
   service: string;
   keys: (ApiKey & { vaultName?: string })[];
   onKeyClick: (key: ApiKey) => void;
   onCopyKey: (key: ApiKey) => void;
   showVault?: boolean;
+  defaultCollapsed?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(!defaultCollapsed);
   const color = getServiceColor(service);
   const name = getServiceName(service);
 
@@ -678,12 +680,13 @@ export function WalletHome() {
           {groupedByService.length > 0 ? (
             groupedByService.map(([service, keys]) => (
               <ServiceGroup
-                key={service}
+                key={`${service}-${vaultFilter}`}
                 service={service}
                 keys={keys}
                 onKeyClick={handleKeyClick}
                 onCopyKey={handleCopyKey}
                 showVault={vaultNames.length > 1}
+                defaultCollapsed={!!vaultFilter}
               />
             ))
           ) : (
