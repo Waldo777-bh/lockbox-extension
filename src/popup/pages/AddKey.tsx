@@ -48,7 +48,33 @@ export function AddKey() {
   });
   const serviceInputRef = useRef<HTMLInputElement>(null);
 
-  const serviceOptions = useMemo(() => getServiceOptions(), []);
+  // Merge preset services with user's existing custom service names
+  const serviceOptions = useMemo(() => {
+    const presets = getServiceOptions();
+    const presetKeys = new Set(presets.map((p) => p.value));
+
+    // Collect unique service names already used in the wallet
+    const userServices: { value: string; label: string }[] = [];
+    if (wallet) {
+      const seen = new Set<string>();
+      for (const vault of wallet.vaults) {
+        for (const key of vault.keys) {
+          if (!presetKeys.has(key.service) && !seen.has(key.service)) {
+            seen.add(key.service);
+            userServices.push({
+              value: key.service,
+              label: key.service.charAt(0).toUpperCase() + key.service.slice(1),
+            });
+          }
+        }
+      }
+    }
+
+    return [
+      ...presets,
+      ...userServices.sort((a, b) => a.label.localeCompare(b.label)),
+    ];
+  }, [wallet]);
 
   const filteredServiceOptions = useMemo(() => {
     if (!serviceInput.trim()) return serviceOptions;
