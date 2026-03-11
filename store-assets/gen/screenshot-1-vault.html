@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280, height=800">
+<title>Lockbox - Screenshot 1</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px; height: 800px;
+    background: linear-gradient(135deg, #0a0a10 0%, #0f0f1a 50%, #0a0a10 100%);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .glow-bg {
+    position: absolute; width: 600px; height: 600px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,216,122,0.06) 0%, transparent 70%);
+    top: -100px; right: -100px;
+  }
+  .glow-bg-2 {
+    position: absolute; width: 400px; height: 400px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,216,122,0.04) 0%, transparent 70%);
+    bottom: -50px; left: -50px;
+  }
+  .container {
+    position: relative; display: flex; align-items: center; gap: 80px; padding: 0 80px;
+  }
+  .text-side { flex: 1; max-width: 480px; }
+  .text-side h1 {
+    font-size: 42px; font-weight: 700; color: #fff; line-height: 1.2; margin-bottom: 16px;
+  }
+  .text-side h1 span { color: #00d87a; }
+  .text-side p {
+    font-size: 18px; color: rgba(255,255,255,0.55); line-height: 1.6; margin-bottom: 32px;
+  }
+  .badges { display: flex; gap: 12px; flex-wrap: wrap; }
+  .badge {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7); font-size: 13px; font-weight: 500;
+  }
+  .badge svg { width: 16px; height: 16px; color: #00d87a; }
+
+  /* Extension popup mockup */
+  .popup {
+    width: 380px; flex-shrink: 0;
+    background: #13131a; border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 60px rgba(0,216,122,0.05);
+    overflow: hidden;
+  }
+  .popup-header {
+    padding: 16px 18px; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .popup-brand { display: flex; align-items: center; gap: 10px; }
+  .popup-logo {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: rgba(0,216,122,0.12); display: flex; align-items: center; justify-content: center;
+  }
+  .popup-logo svg { width: 18px; height: 18px; color: #00d87a; }
+  .popup-brand-text { font-size: 15px; font-weight: 700; color: #fff; }
+  .popup-brand-sub { font-size: 11px; color: rgba(255,255,255,0.35); }
+  .pro-badge {
+    font-size: 10px; font-weight: 700; color: #f5a623;
+    background: rgba(245,166,35,0.12); border: 1px solid rgba(245,166,35,0.2);
+    padding: 3px 8px; border-radius: 6px;
+  }
+  .popup-wallet {
+    padding: 14px 18px; display: flex; align-items: center; gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .wallet-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, #00d87a 0%, #00b368 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; color: #0f0f14;
+  }
+  .wallet-info { flex: 1; }
+  .wallet-name { font-size: 13px; font-weight: 600; color: #fff; }
+  .wallet-count { font-size: 11px; color: rgba(255,255,255,0.4); }
+  .popup-search {
+    margin: 12px 18px; padding: 10px 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.3); font-size: 12px;
+  }
+  .popup-tabs {
+    display: flex; gap: 0; padding: 0 18px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .popup-tab {
+    padding: 8px 14px; font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.35);
+  }
+  .popup-tab.active {
+    color: #00d87a; border-bottom: 2px solid #00d87a;
+  }
+  .service-group { padding: 12px 18px 0; }
+  .service-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.4);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+  }
+  .service-count {
+    font-size: 11px; color: rgba(255,255,255,0.25);
+  }
+  .key-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 10px; margin-bottom: 4px;
+    background: rgba(255,255,255,0.02);
+  }
+  .key-row:hover { background: rgba(255,255,255,0.04); }
+  .key-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+  .key-info { flex: 1; }
+  .key-name { font-size: 12px; font-weight: 600; color: #fff; }
+  .key-preview { font-size: 10px; color: rgba(255,255,255,0.3); font-family: monospace; }
+  .stripe-icon { background: rgba(99,91,255,0.15); color: #635bff; }
+  .openai-icon { background: rgba(16,163,127,0.15); color: #10a37f; }
+  .aws-icon { background: rgba(255,153,0,0.15); color: #ff9900; }
+</style>
+</head>
+<body>
+  <div class="glow-bg"></div>
+  <div class="glow-bg-2"></div>
+  <div class="container">
+    <div class="text-side">
+      <h1>Your API keys,<br><span>encrypted & instant</span></h1>
+      <p>Stop switching tabs to find your keys. Search, copy, and auto-fill directly from your browser toolbar.</p>
+      <div class="badges">
+        <div class="badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          AES-256 Encrypted
+        </div>
+        <div class="badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Zero-Knowledge
+        </div>
+        <div class="badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Instant Search
+        </div>
+      </div>
+    </div>
+    <div class="popup">
+      <div class="popup-header">
+        <div class="popup-brand">
+          <div class="popup-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <div class="popup-brand-text">Lockbox</div>
+            <div class="popup-brand-sub">3 vaults</div>
+          </div>
+        </div>
+        <div class="pro-badge">PRO</div>
+      </div>
+      <div class="popup-wallet">
+        <div class="wallet-avatar">M</div>
+        <div class="wallet-info">
+          <div class="wallet-name">My Wallet</div>
+          <div class="wallet-count">16 keys secured</div>
+        </div>
+      </div>
+      <div class="popup-search">Search keys...</div>
+      <div class="popup-tabs">
+        <div class="popup-tab active">All</div>
+        <div class="popup-tab">Favourites</div>
+        <div class="popup-tab">Recent</div>
+      </div>
+      <div class="service-group">
+        <div class="service-label">
+          <span>Stripe</span>
+          <span class="service-count">3</span>
+        </div>
+        <div class="key-row">
+          <div class="key-icon stripe-icon">S</div>
+          <div class="key-info">
+            <div class="key-name">LIVE_SECRET_KEY</div>
+            <div class="key-preview">sk_live_51N...x8Qk</div>
+          </div>
+        </div>
+        <div class="key-row">
+          <div class="key-icon stripe-icon">S</div>
+          <div class="key-info">
+            <div class="key-name">PUBLISHABLE_KEY</div>
+            <div class="key-preview">pk_live_51N...mR2j</div>
+          </div>
+        </div>
+      </div>
+      <div class="service-group">
+        <div class="service-label">
+          <span>OpenAI</span>
+          <span class="service-count">2</span>
+        </div>
+        <div class="key-row">
+          <div class="key-icon openai-icon">O</div>
+          <div class="key-info">
+            <div class="key-name">API_KEY</div>
+            <div class="key-preview">sk-proj-abc...z9Qk</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

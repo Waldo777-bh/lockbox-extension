@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280, height=800">
+<title>Lockbox - Screenshot 3: Auto-Detect</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px; height: 800px;
+    background: linear-gradient(135deg, #0a0a10 0%, #0f0f1a 50%, #0a0a10 100%);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .glow-bg {
+    position: absolute; width: 600px; height: 600px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,216,122,0.05) 0%, transparent 70%);
+    bottom: -150px; left: 50%; transform: translateX(-50%);
+  }
+
+  .container {
+    position: relative; display: flex; align-items: center; gap: 60px; padding: 0 80px;
+  }
+
+  /* Text side */
+  .text-side { flex: 1; max-width: 440px; }
+  .text-side h1 {
+    font-size: 42px; font-weight: 700; color: #fff; line-height: 1.2; margin-bottom: 16px;
+  }
+  .text-side h1 span { color: #00d87a; }
+  .text-side p {
+    font-size: 18px; color: rgba(255,255,255,0.55); line-height: 1.6; margin-bottom: 32px;
+  }
+  .platform-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .platform-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 10px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.6);
+  }
+  .platform-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  /* Browser mockup */
+  .browser {
+    width: 520px; flex-shrink: 0;
+    background: #1a1a24; border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 25px 80px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  .browser-bar {
+    padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+    background: #111118; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .browser-dots { display: flex; gap: 6px; }
+  .browser-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .browser-dot.r { background: #ff5f57; }
+  .browser-dot.y { background: #febc2e; }
+  .browser-dot.g { background: #28c840; }
+  .browser-url {
+    flex: 1; padding: 6px 14px; border-radius: 8px;
+    background: rgba(255,255,255,0.06);
+    font-size: 12px; color: rgba(255,255,255,0.4);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .browser-url svg { width: 12px; height: 12px; color: #00d87a; }
+
+  /* Page content mockup */
+  .page-content { padding: 28px 32px; }
+  .page-logo {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 24px;
+  }
+  .page-logo-icon {
+    width: 28px; height: 28px; border-radius: 6px;
+    background: rgba(99,91,255,0.15); display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #635bff;
+  }
+  .page-logo-text { font-size: 16px; font-weight: 700; color: #fff; }
+  .page-heading {
+    font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px;
+  }
+  .page-sub { font-size: 12px; color: rgba(255,255,255,0.4); margin-bottom: 20px; }
+
+  .form-field { margin-bottom: 14px; }
+  .form-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.5); margin-bottom: 6px; }
+  .form-input {
+    width: 100%; padding: 10px 14px; border-radius: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    font-size: 13px; color: rgba(255,255,255,0.6); font-family: monospace;
+  }
+  .form-input.detected {
+    border-color: rgba(0,216,122,0.4);
+    box-shadow: 0 0 0 3px rgba(0,216,122,0.08);
+  }
+
+  /* Lockbox toast notification */
+  .lockbox-toast {
+    position: absolute; top: 10px; right: 10px;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; border-radius: 12px;
+    background: #13131a; border: 1px solid rgba(0,216,122,0.25);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(0,216,122,0.08);
+    z-index: 10;
+  }
+  .toast-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: rgba(0,216,122,0.12); display: flex; align-items: center; justify-content: center;
+  }
+  .toast-icon svg { width: 16px; height: 16px; color: #00d87a; }
+  .toast-text { }
+  .toast-title { font-size: 12px; font-weight: 700; color: #fff; }
+  .toast-sub { font-size: 10px; color: rgba(255,255,255,0.4); margin-top: 1px; }
+  .toast-action {
+    font-size: 10px; font-weight: 700; color: #0f0f14;
+    background: #00d87a; padding: 5px 12px; border-radius: 6px;
+    margin-left: 4px;
+  }
+
+  /* Save button */
+  .form-btn {
+    margin-top: 8px; padding: 10px 24px; border-radius: 8px;
+    background: rgba(99,91,255,0.2); border: 1px solid rgba(99,91,255,0.3);
+    font-size: 13px; font-weight: 600; color: #635bff;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+  <div class="glow-bg"></div>
+  <div class="container">
+    <div class="text-side">
+      <h1>Auto-detect on<br><span>20+ platforms</span></h1>
+      <p>Lockbox detects API key fields automatically and offers to save them to your vault with a single click.</p>
+      <div class="platform-grid">
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#635bff;"></div>
+          Stripe
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#10a37f;"></div>
+          OpenAI
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#ff9900;"></div>
+          AWS
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#fff;"></div>
+          GitHub
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#d97757;"></div>
+          Anthropic
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#fff;"></div>
+          Vercel
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#4285f4;"></div>
+          Google Cloud
+        </div>
+        <div class="platform-chip">
+          <div class="platform-dot" style="background:#0080ff;"></div>
+          Azure
+        </div>
+      </div>
+    </div>
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dots">
+          <div class="browser-dot r"></div>
+          <div class="browser-dot y"></div>
+          <div class="browser-dot g"></div>
+        </div>
+        <div class="browser-url">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          dashboard.stripe.com/apikeys
+        </div>
+      </div>
+      <div class="page-content" style="position: relative;">
+        <div class="lockbox-toast">
+          <div class="toast-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div class="toast-text">
+            <div class="toast-title">API key detected</div>
+            <div class="toast-sub">Save to Lockbox vault?</div>
+          </div>
+          <div class="toast-action">Save</div>
+        </div>
+
+        <div class="page-logo">
+          <div class="page-logo-icon">S</div>
+          <div class="page-logo-text">Stripe</div>
+        </div>
+        <div class="page-heading">API Keys</div>
+        <div class="page-sub">Manage your API keys for test and live modes.</div>
+
+        <div class="form-field">
+          <div class="form-label">Publishable key</div>
+          <div class="form-input">pk_live_51NqJ...mR2j</div>
+        </div>
+        <div class="form-field">
+          <div class="form-label">Secret key</div>
+          <div class="form-input detected">sk_live_51NqJ...x8Qk</div>
+        </div>
+        <div class="form-field">
+          <div class="form-label">Restricted key name</div>
+          <div class="form-input" style="color: rgba(255,255,255,0.25);">rk_live_...</div>
+        </div>
+        <div class="form-btn">+ Create restricted key</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=440, height=280">
+<title>Lockbox - Small Tile</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 440px; height: 280px;
+    background: linear-gradient(135deg, #0a0a10 0%, #0f0f1a 50%, #0a0a10 100%);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .glow {
+    position: absolute; width: 300px; height: 300px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,216,122,0.08) 0%, transparent 70%);
+    top: -100px; right: -60px;
+  }
+  .content {
+    position: relative; text-align: center; padding: 0 40px;
+  }
+  .logo {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: rgba(0,216,122,0.12); border: 1px solid rgba(0,216,122,0.2);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+  }
+  .logo svg { width: 26px; height: 26px; color: #00d87a; }
+  .title {
+    font-size: 26px; font-weight: 700; color: #fff; margin-bottom: 6px;
+  }
+  .subtitle {
+    font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.5;
+  }
+  .subtitle span { color: #00d87a; font-weight: 600; }
+  .badges {
+    display: flex; gap: 8px; justify-content: center; margin-top: 16px;
+  }
+  .badge {
+    font-size: 10px; font-weight: 600; padding: 4px 10px; border-radius: 6px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.5);
+  }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="content">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <div class="title">Lockbox</div>
+    <div class="subtitle">Your API keys, <span>encrypted & instant</span></div>
+    <div class="badges">
+      <div class="badge">AES-256</div>
+      <div class="badge">Zero-Knowledge</div>
+      <div class="badge">Auto-Detect</div>
+    </div>
+  </div>
+</body>
+</html>
