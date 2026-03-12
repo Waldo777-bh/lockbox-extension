@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, createRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock,
@@ -20,6 +20,8 @@ import {
   Filter,
 } from "lucide-react";
 import { useWalletContext } from "../App";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { OnboardingTip } from "../components/OnboardingTip";
 import { getServiceName, getServiceColor } from "@/services/serviceRegistry";
 import { countAllKeys, timeAgo, maskValue } from "@/lib/utils";
 import type { ApiKey } from "@/types";
@@ -113,6 +115,7 @@ function SearchToolbar({
   onVaultFilterChange,
   vaultNames,
   onAdd,
+  searchRef,
 }: {
   query: string;
   onChange: (q: string) => void;
@@ -120,6 +123,7 @@ function SearchToolbar({
   onVaultFilterChange: (v: string) => void;
   vaultNames: string[];
   onAdd: () => void;
+  searchRef?: React.RefObject<HTMLInputElement | null>;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -150,10 +154,11 @@ function SearchToolbar({
         <div className="relative flex-1">
           <KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-lockbox-text-muted pointer-events-none" />
           <input
+            ref={searchRef}
             type="text"
             value={query}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Search keys..."
+            placeholder="Search keys...  ⌘K"
             className="w-full pl-8 pr-3 py-2 bg-lockbox-surface border border-lockbox-border rounded-lg text-sm text-lockbox-text placeholder:text-lockbox-text-muted focus:outline-none focus:border-lockbox-accent/50 transition-all"
           />
         </div>
@@ -361,18 +366,37 @@ function KeyItem({
         </div>
       </div>
 
-      {/* Copy button */}
-      <button
+      {/* Copy button with micro-animation (N1) */}
+      <motion.button
         onClick={handleCopy}
+        whileTap={{ scale: 0.85 }}
         className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-lockbox-border transition-all"
         title="Copy key"
       >
-        {copied ? (
-          <Check className="w-3.5 h-3.5 text-lockbox-accent" />
-        ) : (
-          <Copy className="w-3.5 h-3.5 text-lockbox-text-muted" />
-        )}
-      </button>
+        <AnimatePresence mode="wait" initial={false}>
+          {copied ? (
+            <motion.span
+              key="check"
+              initial={{ opacity: 0, scale: 0.5, rotate: -90 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Check className="w-3.5 h-3.5 text-lockbox-accent" />
+            </motion.span>
+          ) : (
+            <motion.span
+              key="copy"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              transition={{ duration: 0.15 }}
+            >
+              <Copy className="w-3.5 h-3.5 text-lockbox-text-muted" />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.button>
     </div>
   );
 }
@@ -543,12 +567,19 @@ function StatsFooter() {
 // ── Main WalletHome ──
 export function WalletHome() {
   const { wallet, config, navigate, lock, setSelectedKey, recordAccess } = useWalletContext();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
   const [vaultFilter, setVaultFilter] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
+
+  // S7: Global keyboard shortcuts
+  useKeyboardShortcuts({
+    onFocusSearch: () => searchInputRef.current?.focus(),
+    onLock: lock,
+  });
 
   // Collect all keys from all vaults
   const allKeys = useMemo(() => {
@@ -669,8 +700,14 @@ export function WalletHome() {
             onVaultFilterChange={setVaultFilter}
             vaultNames={vaultNames}
             onAdd={() => navigate("add-key")}
+            searchRef={searchInputRef}
           />
           <FilterTabs active={activeFilter} onChange={setActiveFilter} />
+          {/* N3: Onboarding tips for new users */}
+          <OnboardingTip
+            tipId="search-shortcut"
+            message="Press ⌘K (or Ctrl+K) to quickly search your keys. Press ⌘L to lock."
+          />
         </>
       )}
 

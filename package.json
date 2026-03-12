@@ -15,7 +15,6 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@scure/bip39": "^2.0.1",
-    "argon2-browser": "^1.18.0",
     "framer-motion": "^12.34.3",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
