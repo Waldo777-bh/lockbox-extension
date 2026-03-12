@@ -91,7 +91,9 @@ async function checkAutoLock() {
         await updateBadge();
       }
     }
-  } catch {}
+  } catch (e) {
+    console.debug("Lockbox: auto-lock check failed", e);
+  }
 }
 
 // ── Context Menu Click Handler (single listener for all menu items) ──
@@ -103,7 +105,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "lockbox-open" || info.menuItemId === "lockbox-search") {
     try {
       await (chrome.action as any).openPopup();
-    } catch {}
+    } catch (e) {
+      console.debug("Lockbox: could not open popup from context menu", e);
+    }
     return;
   }
 });
@@ -150,7 +154,9 @@ async function updateBadge() {
     await chrome.action.setBadgeBackgroundColor({ color: "#00d87a" });
     await chrome.action.setBadgeText({ text: "" });
     await chrome.action.setTitle({ title: "Lockbox — Unlocked" });
-  } catch {}
+  } catch (e) {
+    console.debug("Lockbox: badge update failed", e);
+  }
 }
 
 // ── AES/HMAC helpers for service worker (inline, no imports) ──
@@ -279,7 +285,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 () => { if (chrome.runtime.lastError) { /* tab has no content script */ } }
               );
             }
-          } catch {}
+          } catch (e) {
+            console.debug("Lockbox: clipboard copy failed", e);
+          }
         })();
       }
       break;
@@ -296,7 +304,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 () => { if (chrome.runtime.lastError) { /* tab has no content script */ } }
               );
             }
-          } catch {}
+          } catch (e) {
+            console.debug("Lockbox: paste key failed", e);
+          }
         })();
       }
       break;
@@ -437,7 +447,9 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (command === "quick-copy") {
     try {
       await (chrome.action as any).openPopup();
-    } catch {}
+    } catch (e) {
+      console.debug("Lockbox: quick-copy popup failed", e);
+    }
   }
 });
 
@@ -545,12 +557,12 @@ async function triggerSyncPush() {
             },
           });
         }
-      } catch {
-        // Response parse failed — non-critical
+      } catch (e) {
+        console.debug("Lockbox: sync response parse failed", e);
       }
     }
-  } catch {
-    // Sync failed silently — will retry on next trigger
+  } catch (e) {
+    console.debug("Lockbox: sync push failed, will retry on next trigger", e);
   }
 }
 

@@ -661,7 +661,7 @@ export function useWallet() {
 
 // Helper: try to decrypt with an existing derived key stored in session
 async function unlockWithDerivedKey(vault: any, derivedKeyB64: string) {
-  const { importDerivedKey } = await import("@/crypto/argon2");
+  const { importDerivedKey } = await import("@/crypto/pbkdf2");
   const { decrypt } = await import("@/crypto/aes");
   const { verifyHMAC } = await import("@/crypto/hmac");
 

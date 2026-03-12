@@ -118,6 +118,8 @@ function showKeyPicker(field: DetectedField, icon: HTMLElement) {
     </div>
   `;
 
+  picker.setAttribute("role", "listbox");
+  picker.setAttribute("aria-label", "Select an API key from Lockbox");
   document.body.appendChild(picker);
 
   // Close button
@@ -125,11 +127,34 @@ function showKeyPicker(field: DetectedField, icon: HTMLElement) {
     picker.remove();
   });
 
+  // Keyboard navigation: Escape to close, Arrow keys to navigate
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      picker.remove();
+      document.removeEventListener("keydown", onKeyDown);
+      icon.focus();
+      return;
+    }
+    const rows = picker.querySelectorAll<HTMLButtonElement>(".lockbox-picker-row");
+    if (!rows.length) return;
+    const focused = picker.querySelector<HTMLButtonElement>(".lockbox-picker-row:focus");
+    const idx = focused ? Array.from(rows).indexOf(focused) : -1;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      rows[Math.min(idx + 1, rows.length - 1)].focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      rows[Math.max(idx - 1, 0)].focus();
+    }
+  };
+  document.addEventListener("keydown", onKeyDown);
+
   // Close on click outside
   const onClickOutside = (e: MouseEvent) => {
     if (!picker.contains(e.target as Node) && e.target !== icon) {
       picker.remove();
       document.removeEventListener("click", onClickOutside);
+      document.removeEventListener("keydown", onKeyDown);
     }
   };
   setTimeout(() => document.addEventListener("click", onClickOutside), 100);

@@ -5,3 +5,8 @@ dist/
 .env.*
 .DS_Store
 Thumbs.db
+# Build artifacts
+*.zip
+*.crx
+# CRX signing key — must never be committed
+extension.pem

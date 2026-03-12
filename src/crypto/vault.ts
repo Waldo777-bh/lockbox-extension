@@ -2,7 +2,7 @@
 
 import type { EncryptedVault, DecryptedWallet, Vault } from "@/types";
 import { encrypt, decrypt, generateSalt, bufferToBase64, base64ToBuffer } from "./aes";
-import { deriveKey, exportDerivedKey, importDerivedKey } from "./argon2";
+import { deriveKey, exportDerivedKey, importDerivedKey } from "./pbkdf2";
 import { computeHMAC, verifyHMAC } from "./hmac";
 import { recoveryPhraseToKey } from "./recovery";
 
