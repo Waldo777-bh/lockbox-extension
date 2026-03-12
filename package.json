@@ -8,7 +8,8 @@
     "dev": "vite build --watch --mode development",
     "build": "tsc && vite build",
     "clean": "rm -rf dist",
-    "pack": "node scripts/pack-crx.js",
+    "pack": "node scripts/pack-zip.js",
+    "pack:crx": "node scripts/pack-crx.js",
     "sync": "node scripts/sync-to-dashboard.js",
     "release": "npm run build && npm run pack && npm run sync"
   },
