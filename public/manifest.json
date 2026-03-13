@@ -10,7 +10,6 @@
     "clipboardWrite",
     "notifications",
     "alarms",
-    "scripting",
     "sidePanel"
   ],
   "host_permissions": [
