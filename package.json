@@ -16,7 +16,7 @@
   "dependencies": {
     "@noble/hashes": "^2.0.1",
     "@scure/bip39": "^2.0.1",
-    "framer-motion": "^12.34.3",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
